@@ -23,19 +23,10 @@ SOFTWARE.
 */
 
 
-#[derive(Debug, Clone, Copy)]
-pub enum Error {
 
-    /// Server maximum client allowed is below [`SERVER_MINIMUM_CLIENT_CAP`](super::SERVER_MINIMUM_CLIENT_CAP).
-    MaximumClientBelowMinimum,
-
-    /// Server maximum client allowed is above [`SERVER_MAXIMUM_CLIENT_CAP`](super::SERVER_MAXIMUM_CLIENT_CAP).
-    MaximumClientAboveMaximum,
-
-    /// Server worker count is below [`SERVER_MINIMUM_WORKER_CAP`](super::SERVER_MINIMUM_WORKER_CAP).
-    WorkerCountBelowMinimum,
-
-    /// Server worker count is above maximum client allowed.
-    WorkerCountAboveMaximum,
-
+/// Possible server statuses
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ServerStatus {
+    Active,
 }
+

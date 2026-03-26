@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+
 use crate::{Message, server::{ClientId, worker::WorkerId}};
 use super::ServerError;
 
 /// Message and updates sent to and received by server
+#[derive(Debug, Clone)]
 pub enum ServerMessage<IN : Message> {
 
     /// Incoming message of a client
@@ -38,6 +40,7 @@ pub enum ServerMessage<IN : Message> {
 }
 
 /// Possible server update
+#[derive(Debug, Clone, Copy)]
 pub enum ServerUpdate {
 
     /// New client connected with Id
@@ -55,6 +58,7 @@ pub enum ServerUpdate {
 }
 
 /// Message sent to and received by supervisor
+#[derive(Debug, Clone, Copy)]
 pub enum SupervisorMessage {
 
     /// Message sent from server
@@ -66,6 +70,7 @@ pub enum SupervisorMessage {
 }
 
 /// Supervisor message sent from server
+#[derive(Debug, Clone, Copy)]
 pub enum SupervisorServerMessage {
 
     /// Tell supervisor to execute jobs
@@ -84,16 +89,17 @@ pub enum SupervisorServerMessage {
 }
 
 /// Supervisor message sent from worker
+#[derive(Debug, Clone, Copy)]
 pub enum SupervisorWorkerMessage {
 
     /// Client is now connected
     Connected(ClientId),
 
     /// Worker finished incoming connection job
-    IncomingDone,
+    IncomingJobDone,
 
     /// Worker finished receiving incoming message of client
-    ReceiveDone(ClientId),
+    ReceiveJobDone(ClientId),
 
     /// Client connection closed
     ConnectionClosed(ClientId),
@@ -107,6 +113,7 @@ pub enum SupervisorWorkerMessage {
 }
 
 /// Message sent to and received by worker
+#[derive(Debug, Clone, Copy)]
 pub enum WorkerMessage<OUT : Message> {
 
     /// Handle incoming connection to server
@@ -129,6 +136,7 @@ pub enum WorkerMessage<OUT : Message> {
 }
 
 /// Outgoing message sent by server to client.
+#[derive(Debug, Clone)]
 pub struct OutgoingMessage<OUT : Message> {
     destinations : Vec<ClientId>,
     message : OUT
@@ -149,6 +157,7 @@ impl<OUT: Message> OutgoingMessage<OUT> {
 }
 
 /// Message received by client
+#[derive(Debug, Clone)]
 pub struct IncomingMessage<IN : Message> {
     client : ClientId,
     message : IN

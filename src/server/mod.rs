@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::net::SocketAddr;
+use std::{marker::PhantomData, net::SocketAddr};
 
-use crate::server::{error::Error, message::ServerMessage};
+use crate::{Message, server::{channel::ServerChannel, error::Error, message::{OutgoingMessage, ServerMessage}}};
 
 #[doc(hidden)]
 pub mod error;
@@ -33,36 +33,71 @@ pub mod message;
 pub mod worker;
 pub mod supervisor;
 
+#[doc(hidden)]
+pub mod status;
+
+#[doc(hidden)]
+pub mod channel;
+
 pub use error::Error as ServerError;
+pub use status::ServerStatus as ServerStatus;
 
 pub type ClientId = u16;
 
-/// Possible server statuses
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum ServerStatus {
+/// Current minimum client cap
+pub const SERVER_MINIMUM_CLIENT_CAP : usize = 1;
 
+/// Current maximum client cap
+pub const SERVER_MAXIMUM_CLIENT_CAP : usize = ClientId::MAX as usize;
+
+/// Minimum worker count cap
+pub const SERVER_MINIMUM_WORKER_CAP : usize = 1;
+
+
+pub struct ServerClient {
+    client_id : ClientId,
+    addr : SocketAddr,
 }
 
 
 /// Server end of baphonet
-pub struct Server {
+pub struct Server<IN : Message, OUT : Message> {
+
+    /// Maximum client connection allowed
+    maximum_client : usize,
+
+    /// Count of worker threads allowed
+    worker_count : usize,
+
+    /// Communication channels between threads
+    channels : ServerChannel<IN, OUT>,
 
     /// Current status of the server
     status : ServerStatus,
 
 }
 
-impl Server {
+impl<IN: Message, OUT: Message> Server<IN, OUT> {
 
-    /// Create new server
+    /// Create new server that client can connect to.
+    /// 
+    /// # Parameters
+    /// - `maximum_client` : Maximum possible client that are allowed to connect to server. Must
+    ///     be between [`SERVER_MINIMUM_CLIENT_CAP`] and [`SERVER_MAXIMUM_CLIENT_CAP`].
+    /// - `worker_count` : Count of worker used to manage connection, receive client message, etc. Must
+    ///     be between [`SERVER_MINIMUM_WORKER_CAP`] and `maximum_client` parameter.
     /// 
     /// # Returns
     /// - [`Result`]
-    ///     - Ok([`EthosNetServer`]) if successful
-    ///     - Err([`ServerError::ServerMaxClientHardCap`]) if client hard cap reached.
-    ///     - Err([`ServerError::ServerMaxClientTooLow`]) if lower than minimum.
-    pub fn new(max_client : usize, worker_count : usize) -> Result<Server, Error> {
-        todo!()
+    ///     - Ok([`Server`]) on success.
+    ///     - Err([`ServerError::MaximumClientBelowMinimum`]) if maximum client is below [`SERVER_MINIMUM_CLIENT_CAP`].
+    ///     - Err([`ServerError::MaximumClientAboveMaximum`]) if maximum  client is above [`SERVER_MAXIMUM_CLIENT_CAP`].
+    ///     - Err([`ServerError::WorkerCountBelowMinimum`]) if worker count is below [`SERVER_MINIMUM_WORKER_CAP`].
+    ///     - Err([`ServerError::WorkerCountAboveMaximum`]) if worker count is above `maximum_client` parameter.
+    pub fn new(maximum_client : usize, worker_count : usize) -> Result<Server<IN, OUT>, Error> {
+        
+        Ok(Server { maximum_client, worker_count,
+            status: ServerStatus::Active, channels : ServerChannel::new() })
     }
 
     /// Returns current server status
@@ -76,7 +111,7 @@ impl Server {
     /// - [`Result`]:
     ///     - Ok(Some([`ServerMessage`])) if message found.
     ///     - Ok(None) if no message found.
-    pub fn message(&mut self) -> Option<ServerMessage> {
+    pub fn message(&mut self) -> Option<ServerMessage<IN>> {
         todo!()
     }
 
@@ -111,7 +146,7 @@ impl Server {
     ///     - Err([`ServerError::ServerPaused`]) if server is paused.
     ///     - Err([`ServerError::ServerSendNoDestination`]) if no destination specified
     ///     - Err([`ServerError::Unexpected`]) if unexpected error happened.
-    pub fn send(&mut self, message : ServerMessage) -> Result<(),Error> {
+    pub fn send(&mut self, message : OutgoingMessage<OUT>) -> Result<(),Error> {
         todo!()
     }
 

@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Error {
 
     /// Server maximum client allowed is below [`SERVER_MINIMUM_CLIENT_CAP`](super::SERVER_MINIMUM_CLIENT_CAP).

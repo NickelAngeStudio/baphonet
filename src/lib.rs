@@ -35,8 +35,8 @@ pub use error::Error as Error;
 /// Message that are sent between server and client.
 pub trait Message {
     /// Pack the message into a buffer of little endians bytes
-    fn to_le_bytes(&self, buffer : &[u8]) -> Result<usize, Error>;
+    fn to_le_bytes(&self, buffer : &mut [u8]) -> Result<usize, Error>;
 
     /// Extract the message from little endians bytes. 
-    fn from_le_bytes() -> Result<Self, Error> where Self: Sized;
+    fn from_le_bytes(buffer : &[u8]) -> Result<Self, Error> where Self: Sized;
 }

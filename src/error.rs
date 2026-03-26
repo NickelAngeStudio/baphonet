@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 
+#[derive(Debug)]
 pub enum Error {
     
 }

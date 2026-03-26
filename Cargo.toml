@@ -1,0 +1,12 @@
+[package]
+name = "baphonet"
+version = "0.0.0"
+edition = "2024"
+authors = ["NickelAnge.Studio <rust@nickelange.studio>"]
+description = "Reserved"
+license = "MIT"
+repository = "https://codeberg.org/NickelAngeStudio/baphonet"
+readme = "README.md"
+
+
+[dependencies]

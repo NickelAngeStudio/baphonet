@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,3 +25,18 @@ SOFTWARE.
 
 pub mod server;
 pub mod client;
+
+#[doc(hidden)]
+pub mod error;
+
+pub use error::Error as Error;
+
+
+/// Message that are sent between server and client.
+pub trait Message {
+    /// Pack the message into a buffer of little endians bytes
+    fn to_le_bytes(&self, buffer : &[u8]) -> Result<usize, Error>;
+
+    /// Extract the message from little endians bytes. 
+    fn from_le_bytes() -> Result<Self, Error> where Self: Sized;
+}

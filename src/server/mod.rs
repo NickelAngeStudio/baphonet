@@ -24,11 +24,16 @@ SOFTWARE.
 
 use std::net::SocketAddr;
 
-use crate::server::{error::Error, message::Message};
+use crate::server::{error::Error, message::ServerMessage};
 
+#[doc(hidden)]
 pub mod error;
-pub mod message;
 
+pub mod message;
+pub mod worker;
+pub mod supervisor;
+
+pub use error::Error as ServerError;
 
 pub type ClientId = u16;
 
@@ -39,9 +44,10 @@ pub enum ServerStatus {
 }
 
 
-
+/// Server end of baphonet
 pub struct Server {
 
+    /// Current status of the server
     status : ServerStatus,
 
 }
@@ -68,9 +74,9 @@ impl Server {
     /// 
     /// Returns :
     /// - [`Result`]:
-    ///     - Ok(Some([`Message`])) if message found.
+    ///     - Ok(Some([`ServerMessage`])) if message found.
     ///     - Ok(None) if no message found.
-    pub fn message(&mut self) -> Option<Message> {
+    pub fn message(&mut self) -> Option<ServerMessage> {
         todo!()
     }
 

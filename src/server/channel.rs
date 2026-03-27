@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}};
+use std::{net::TcpListener, sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}}};
 
 use crate::{Message, server::message::{ServerMessage, SupervisorMessage, WorkerMessage}};
 
@@ -60,4 +60,56 @@ impl<IN : Message,OUT : Message> ServerChannel<IN, OUT> {
             rcv_worker: Arc::new(Mutex::new(rcv_worker)) }
     }
 
+}
+
+/// Supervisor communication channels
+pub(super) struct SupervisorChannel<IN : Message,OUT : Message> {
+
+    /// Channel Message sender to server
+    pub sdr_server : Sender<ServerMessage<IN>>,
+
+    /// Channel Message sender and receiver to supervisor
+    pub sdr_supervisor : Sender<SupervisorMessage>,
+    pub rcv_supervisor : Arc<Receiver<SupervisorMessage>>,
+
+     // Sender and receiver channels for worker messages
+    pub sdr_worker : Sender<WorkerMessage<OUT>>,
+    pub rcv_worker : Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
+
+}
+
+impl<IN : Message,OUT : Message> SupervisorChannel<IN,OUT> {
+    pub fn from_server_channels(channels : &ServerChannel<IN,OUT>) -> SupervisorChannel<IN,OUT> {
+        SupervisorChannel { 
+            sdr_server: channels.sdr_server.clone(), 
+            sdr_supervisor: channels.sdr_supervisor.clone(), 
+            rcv_supervisor: channels.rcv_supervisor.clone(), 
+            sdr_worker: channels.sdr_worker.clone(), 
+            rcv_worker: channels.rcv_worker.clone() }
+    }
+}
+
+
+/// Worker communication channels
+pub(super) struct WorkerChannel<IN : Message,OUT : Message> {
+
+    /// Channel Message sender to server
+    pub sdr_server : Sender<ServerMessage<IN>>,
+
+    /// Channel Message sender and receiver to supervisor
+    pub sdr_supervisor : Sender<SupervisorMessage>,
+
+     // Receiver channels for worker messages
+    pub rcv_worker : Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
+
+}
+
+impl<IN : Message,OUT : Message> WorkerChannel<IN,OUT> {
+    pub fn from_supervisor_channels(channels : &SupervisorChannel<IN,OUT>) -> WorkerChannel<IN,OUT> {
+        WorkerChannel { 
+            sdr_server: channels.sdr_server.clone(), 
+            sdr_supervisor: channels.sdr_supervisor.clone(), 
+            rcv_worker: channels.rcv_worker.clone() 
+        }
+    }
 }

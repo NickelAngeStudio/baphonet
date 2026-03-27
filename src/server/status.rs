@@ -24,9 +24,40 @@ SOFTWARE.
 
 
 
+
 /// Possible server statuses
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ServerStatus {
+    /// Server is currently inactive.
+    Inactive,
+
+    /// Server is currently starting
+    Starting,
+
+    /// Server is up and running
     Active,
+
+    /// Server is paused. Connections are maintained but nothing is read or sent.
+    Paused,
+
+    /// Server is currently ending and will soon be inactive.
+    Ending,
 }
 
+/// Possible supervisor statuses
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum SupervisorStatus {
+
+    /// Supervisor is currently starting
+    Starting,
+
+    /// Supervisor is up and running
+    Active,
+
+    /// Supervisor is paused. Connections are maintained but nothing is read or sent.
+    Paused,
+
+    /// Supervisor is ending and will soon be dropped.
+    Ending,
+
+}

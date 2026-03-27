@@ -22,8 +22,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use std::{net::{SocketAddr, TcpStream}, sync::{Arc, Mutex}};
 
-#[derive(Debug)]
-pub enum Error {
-    
+use crate::server::ClientId;
+
+/// Definition of the shared client list.
+pub(crate) type Clients = Arc<Vec<Mutex<Option<Client>>>>;
+
+/// Client of the server
+pub(crate) struct Client {
+
+    /// TcpStream used to communicate with client
+    pub stream : TcpStream,
+
+    /// Incoming message size if any
+    pub inc_msg_size : Option<usize>,
+
+}
+
+/// A client of the server given from [`Server::clients()`](super::Server::clients());
+pub struct ServerClient {
+    client_id : ClientId,
+    addr : SocketAddr,
 }

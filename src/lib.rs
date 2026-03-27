@@ -26,17 +26,30 @@ SOFTWARE.
 pub mod server;
 pub mod client;
 
-#[doc(hidden)]
-pub mod error;
-
-pub use error::Error as Error;
-
 
 /// Message that are sent between server and client.
+/// 
+/// See integration tests for usage with Tampon crate.
 pub trait Message {
-    /// Pack the message into a buffer of little endians bytes
-    fn to_le_bytes(&self, buffer : &mut [u8]) -> Result<usize, Error>;
+    /// Serialize the message into a provided [[u8]] buffer.
+    /// 
+    /// # Panic
+    /// Implementation could [`panic!`] if buffer length is too small. 
+    /// <br>Verify buffer length before serializing and return Err(()) 
+    /// if too small.
+    /// 
+    /// Crate Tampon [`bytes_size`](https://docs.rs/tampon/latest/tampon/macro.bytes_size.html) can
+    /// verify data length to compare to buffer.
+    fn serialize(&self, buffer : &mut [u8]) -> Result<usize, ()>;
 
-    /// Extract the message from little endians bytes. 
-    fn from_le_bytes(buffer : &[u8]) -> Result<Self, Error> where Self: Sized;
+    /// Deserialize the message from a provided [[u8]] buffer.
+    /// 
+    /// # Panic
+    /// Implementation could [`panic!`] if buffer is incomplete and/
+    /// or corrupt. <br>Verify buffer integrity and return Err(())
+    /// accordingly. 
+    /// 
+    /// Crate Tampon [`deserialize_size`](https://docs.rs/tampon/latest/tampon/macro.deserialize_size.html)
+    /// can verify buffer integrity.
+    fn deserialize(buffer : &[u8]) -> Result<Self, ()> where Self: Sized;
 }

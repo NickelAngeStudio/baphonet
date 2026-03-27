@@ -10,3 +10,7 @@ readme = "README.md"
 
 
 [dependencies]
+
+
+[dev-dependencies]
+tampon = "1.2.0"

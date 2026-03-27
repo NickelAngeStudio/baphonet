@@ -23,8 +23,26 @@ SOFTWARE.
 */
 
 
-/// Ingoing and outgoing messages
-pub mod message;
-
 /// Tests for Server::new()
-mod new;
+mod tnew;
+
+/// Tests for Server::start()
+mod tstart;
+
+/// Tests for Server::clients()
+mod tclients;
+
+/// Tests for Server::stop()
+mod tstop;
+
+/// Tests for Server::message()
+mod tmessage;
+
+/// Tests for Server:close_connection()
+mod tcc;
+
+/// Tests for Server::send()
+mod tsend;
+
+/// Tests for Server::pause()
+mod tpause;

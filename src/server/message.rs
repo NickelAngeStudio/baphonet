@@ -23,8 +23,8 @@ SOFTWARE.
 */
 
 
-use crate::{Message, server::{ClientId, worker::WorkerId}};
-use super::ServerError;
+use crate::{Message, server::{ClientId, status::SupervisorStatus, worker::WorkerId}};
+use super::Error;
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
@@ -33,15 +33,17 @@ pub enum ServerMessage<IN : Message> {
     /// Incoming message of a client
     Incoming(IncomingMessage<IN>),
 
-    /// Server updates
-    Update(ServerUpdate),
-
+    /// Server update sent from supervisor
+    Update(SupervisorUpdate),
 
 }
 
 /// Possible server update
 #[derive(Debug, Clone, Copy)]
-pub enum ServerUpdate {
+pub enum SupervisorUpdate {
+
+    /// Supervisor is now active
+    Active,
 
     /// New client connected with Id
     ClientConnected(ClientId),
@@ -53,7 +55,10 @@ pub enum ServerUpdate {
     ClientConnectionLost(ClientId),
 
     /// An error occurred.
-    Error(ServerError),
+    Error(Error),
+
+    /// Supervisor has ended
+    Ended,
 
 }
 

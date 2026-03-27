@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,3 +21,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+
+use std::{net::TcpListener, sync::{Arc, Mutex}, thread::JoinHandle};
+
+use crate::{Message, server::{channel::SupervisorChannel, client::Clients, status::SupervisorStatus, task::Tasks}};
+
+/// Supervisor of worker threads
+pub(crate) struct Supervisor<IN : Message, OUT : Message> {
+
+    /// TcpListener used to manage connections
+    listener : Arc<Mutex<TcpListener>>,
+
+    /// Status of the supervisor thread
+    status : SupervisorStatus,
+
+    /// Count of worker for this supervisor
+    worker_count : usize,
+
+    /// Shared clients between threads
+    clients : Clients,
+
+    /// Shared server channels
+    channels : SupervisorChannel<IN, OUT>,
+
+    /// Tasks executed by workers
+    tasks : Tasks,
+
+    /// Worker thread handles
+    workers : Vec<JoinHandle<()>>,
+}
+
+impl <IN : Message, OUT : Message> Supervisor<IN, OUT> {
+    
+}

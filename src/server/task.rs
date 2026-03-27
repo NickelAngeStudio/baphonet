@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,23 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::net::Ipv4Addr;
 
-/// Definition of clients size use for tests
-pub struct ClientSize { pub none : usize, pub one : usize, pub some : usize, pub all : usize  }
-pub const CLIENT_SIZE : ClientSize= ClientSize{ none: 0, one: 1, some: 32, all: 64 };
 
-/// Definition of worker count used for tests
-pub struct WorkerCount { pub one : usize, pub some : usize, pub all : usize  }
-pub const WORKER_COUNT : WorkerCount= WorkerCount{ one: 1, some: 4, all: 16 };
+/// Tasks that are executed by workers.
+pub struct TaskStatus {
 
-/// IPv4 adress used for tests
-pub const TEST_IPV4 : Ipv4Addr = Ipv4Addr::new(127,0,0,1);
+}
 
-/// TCP port used for tests
-pub const TEST_TCP_PORT : u16 = 50000;
+/// Task that are executed by workers.
+pub struct Tasks {
 
-/// Trait Message implementation tests
-pub mod message;
-
-mod server;
+}

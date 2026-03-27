@@ -38,4 +38,13 @@ pub enum Error {
     /// Server worker count is above maximum client allowed.
     WorkerCountAboveMaximum,
 
+    /// Server is already active
+    ServerAlreadyActive,
+
+    /// Provided socket for start is invalid
+    SocketInvalid,
+
+    /// Provided socket address is already used by another process
+    SocketAddressAlreadyUsed,
+
 }

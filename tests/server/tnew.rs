@@ -32,14 +32,14 @@ SOFTWARE.
 //! - Err([`ServerError::WorkerCountBelowMinimum`]) if worker count is below [`SERVER_MINIMUM_WORKER_CAP`].
 //! - Err([`ServerError::WorkerCountAboveMaximum`]) if worker count is above `maximum_client` parameter.
 
-use baphonet::{Error, server::{SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, Server, ServerError}};
+use baphonet::server::{Error, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, Server, ServerStatus};
 
-use crate::server::message::{ClientToServerMessage, ServerToClientMessage};
+use crate::message::{ClientToServerMessage, ServerToClientMessage};
 
 #[test]
 fn server_new_ok_minimum_client() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP) {
-        Ok(_) => {},
+        Ok(server) => assert_eq!(server.status(), ServerStatus::Inactive),
         Err(err) => panic!("Shouldn't err({:?})!", err),
     }
 }
@@ -48,7 +48,7 @@ fn server_new_ok_minimum_client() {
 fn server_new_ok_maximum_client() {
 
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP) {
-        Ok(_) => {},
+        Ok(server) => assert_eq!(server.status(), ServerStatus::Inactive),
         Err(err) => panic!("Shouldn't err({:?})!", err),
     }
 
@@ -57,7 +57,7 @@ fn server_new_ok_maximum_client() {
 #[test]
 fn server_new_ok_minimum_worker() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP) {
-        Ok(_) => {},
+        Ok(server) => assert_eq!(server.status(), ServerStatus::Inactive),
         Err(err) => panic!("Shouldn't err({:?})!", err),
     }
 }
@@ -65,7 +65,7 @@ fn server_new_ok_minimum_worker() {
 #[test]
 fn server_new_ok_maximum_worker() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP, SERVER_MAXIMUM_CLIENT_CAP) {
-        Ok(_) => {},
+        Ok(server) => assert_eq!(server.status(), ServerStatus::Inactive),
         Err(err) => panic!("Shouldn't err({:?})!", err),
     }
 }
@@ -74,7 +74,7 @@ fn server_new_ok_maximum_worker() {
 fn server_new_err_client_below_minimum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP - 1, SERVER_MINIMUM_WORKER_CAP) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, ServerError::MaximumClientBelowMinimum),
+        Err(err) =>assert_eq!(err, Error::MaximumClientBelowMinimum),
     }
 }
 
@@ -82,7 +82,7 @@ fn server_new_err_client_below_minimum() {
 fn server_new_err_client_above_maximum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP + 1, SERVER_MINIMUM_WORKER_CAP) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, ServerError::MaximumClientAboveMaximum),
+        Err(err) =>assert_eq!(err, Error::MaximumClientAboveMaximum),
     }
 }
 
@@ -90,7 +90,7 @@ fn server_new_err_client_above_maximum() {
 fn server_new_err_worker_below_minimum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP - 1) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, ServerError::WorkerCountBelowMinimum),
+        Err(err) =>assert_eq!(err, Error::WorkerCountBelowMinimum),
     }
 }
 
@@ -98,7 +98,7 @@ fn server_new_err_worker_below_minimum() {
 fn server_new_err_worker_above_maximum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP, SERVER_MAXIMUM_CLIENT_CAP + 1) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, ServerError::WorkerCountAboveMaximum),
+        Err(err) =>assert_eq!(err, Error::WorkerCountAboveMaximum),
     }
 }
 

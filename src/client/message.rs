@@ -21,3 +21,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+use crate::{Message, client::{Error, status::WorkerStatus}};
+
+/// Message sent to client from worker
+pub enum ClientMessage<IN : Message + Send + 'static> {
+
+    /// Incoming message from server
+    Incoming(IN),
+
+    /// An error occurred from the worker thread
+    Error(Error),
+
+    /// Worker status changed
+    StatusChanged(WorkerStatus)
+
+}
+
+/// Message sent to worker from client
+pub enum WorkerMessage<OUT : Message + Send + 'static> {
+
+    /// Send a message to the server
+    Send(OUT),
+
+    /// Stop the worker thread
+    Stop,
+
+}

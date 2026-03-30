@@ -22,14 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::SocketAddr, sync::{Arc, Mutex}};
+use std::{net::SocketAddr, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
-use crate::{Message, server::{ ClientId, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, ServerStatus, channel::ServerChannel, client::{Client, Clients, ServerClient}, error::Error, message::{OutgoingMessage, ServerMessage}}};
+use crate::{Message, server::{ ClientId, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, ServerStatus, channel::ServerChannel, client::{Client, Clients, ServerClient}, error::Error, message::{OutgoingMessage, ServerMessage}, supervisor::Supervisor}};
 
 
 
 /// Server end of baphonet
-pub struct Server<IN : Message, OUT : Message> {
+pub struct Server<IN : Message + Send + 'static,OUT : Message + Send + 'static> {
 
     /// Maximum client connection allowed
     maximum_client : usize,
@@ -38,7 +38,7 @@ pub struct Server<IN : Message, OUT : Message> {
     worker_count : usize,
 
     /// Communication channels between threads
-    channels : ServerChannel<IN, OUT>,
+    channels : Option<ServerChannel<IN, OUT>>,
 
     /// Shared clients list
     clients : Clients,
@@ -46,9 +46,12 @@ pub struct Server<IN : Message, OUT : Message> {
     /// Current status of the server
     status : ServerStatus,
 
+    /// Supervisor thread handle
+    supervisor_handle : Option<JoinHandle<()>>
+
 }
 
-impl<IN: Message, OUT: Message> Server<IN, OUT> {
+impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OUT> {
 
     /// Create new server that client can connect to.
     /// 
@@ -79,10 +82,10 @@ impl<IN: Message, OUT: Message> Server<IN, OUT> {
 
         // Return new created server
         Ok(Server { maximum_client, worker_count, clients : Arc::new(clients),
-            status: ServerStatus::Inactive, channels : ServerChannel::new() })
+            status: ServerStatus::Inactive, channels : None, supervisor_handle : None })
     }
 
-    /// Start the server at specified socketr addr
+    /// Start the server at specified socketr address.
     /// 
     /// # Returns
     /// - [`Result`]
@@ -90,11 +93,15 @@ impl<IN: Message, OUT: Message> Server<IN, OUT> {
     ///     - Err([`Error::ServerAlreadyActive`]) if server already active.
     ///     - Err([`Error::SocketInvalid`]) if provided socket is invalid.
     ///     - Err([`Error::SocketAddressAlreadyUsed`]) if provided socket is invalid.
+    ///     - Err([`Error::SetNonblockingFailed`]) if listener could not be set non-blocking
+    ///     - Err([`Error::UnhandledIOError`]) if any unexpecxted IO error occurred
     pub fn start(&mut self, socket : SocketAddr) -> Result<(), Error> {
-        todo!()
         
-
-       
+        match self.status {
+            ServerStatus::Inactive => self.create_supervisor(socket),
+            _ => Err(Error::ServerAlreadyActive),
+        }
+        
     }
 
     /// Returns current server status
@@ -188,6 +195,30 @@ impl<IN: Message, OUT: Message> Server<IN, OUT> {
     ///     - Err([`Error::Unexpected`]) if unexpected error happened.
     pub fn stop(&mut self) -> Result<(),Error> {
         todo!()
+    }
+
+    /// Create the supervisor thread
+    #[inline]
+    fn create_supervisor(&mut self, socket : SocketAddr) -> Result<(), Error>{
+
+        // Create channels
+        let (server_channels, supervisor_channels) = ServerChannel::new();
+
+        match Supervisor::<IN, OUT>::new(socket, self.maximum_client, self.worker_count, self.clients.clone(), supervisor_channels){
+            Ok(mut supervisor) => {
+
+                self.supervisor_handle = Some(thread::spawn(move || {
+                    supervisor.execute();
+                }));
+
+                self.channels = Some(server_channels);
+                self.status = ServerStatus::Starting;
+
+                Ok(())
+            },
+            Err(err) => Err(err),
+        }
+
     }
 
 }

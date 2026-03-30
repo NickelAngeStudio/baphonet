@@ -28,7 +28,7 @@ use super::Error;
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
-pub enum ServerMessage<IN : Message> {
+pub enum ServerMessage<IN : Message + Send> {
 
     /// Incoming message of a client
     Incoming(IncomingMessage<IN>),
@@ -119,7 +119,7 @@ pub enum SupervisorWorkerMessage {
 
 /// Message sent to and received by worker
 #[derive(Debug, Clone, Copy)]
-pub enum WorkerMessage<OUT : Message> {
+pub enum WorkerMessage<OUT : Message + Send> {
 
     /// Handle incoming connection to server
     Incoming,
@@ -142,12 +142,12 @@ pub enum WorkerMessage<OUT : Message> {
 
 /// Outgoing message sent by server to client.
 #[derive(Debug, Clone)]
-pub struct OutgoingMessage<OUT : Message> {
+pub struct OutgoingMessage<OUT : Message + Send> {
     destinations : Vec<ClientId>,
     message : OUT
 }
 
-impl<OUT: Message> OutgoingMessage<OUT> {
+impl<OUT : Message + Send> OutgoingMessage<OUT> {
     /// Created a new server message around a CoreServerMessage
     #[inline]
     pub fn new(message : OUT) -> OutgoingMessage<OUT> {
@@ -163,7 +163,7 @@ impl<OUT: Message> OutgoingMessage<OUT> {
 
 /// Message received by client
 #[derive(Debug, Clone)]
-pub struct IncomingMessage<IN : Message> {
+pub struct IncomingMessage<IN : Message + Send> {
     client : ClientId,
     message : IN
 }

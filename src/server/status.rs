@@ -48,9 +48,6 @@ pub enum ServerStatus {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum SupervisorStatus {
 
-    /// Supervisor is currently starting
-    Starting,
-
     /// Supervisor is up and running
     Active,
 
@@ -60,4 +57,13 @@ pub enum SupervisorStatus {
     /// Supervisor is ending and will soon be dropped.
     Ending,
 
+}
+
+/// Possible status of worker
+pub(crate) enum WorkerStatus {
+    /// Worker is active
+    Active,
+
+    /// Worker has ended
+    Ended
 }

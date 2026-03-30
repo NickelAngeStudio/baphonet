@@ -21,3 +21,35 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+
+/// Possible client statuses
+pub enum ClientStatus {
+
+    /// Client is currently disconnected.
+    Disconnected,
+
+    /// Client is currently trying to connect
+    Connecting,
+
+    /// Client is currently connected.
+    Connected,
+
+    /// Client is currently disconnecting
+    Disconnecting,
+
+}
+
+/// Possible statuses of the worker thread
+pub(crate) enum WorkerStatus {
+
+    /// Worker thread is starting
+    Starting,
+
+    /// Worker thread is active
+    Active,
+
+    /// Worker thread has ended
+    Ended,
+
+}

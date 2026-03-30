@@ -24,12 +24,31 @@ SOFTWARE.
 
 
 
-/// Tasks that are executed by workers.
-pub struct TaskStatus {
+/// Status of a task
+pub(crate) enum TaskStatus {
+    /// Task is ready to be executed
+    Ready,
+
+    /// Task is currently in progress
+    InProgress,
 
 }
 
 /// Task that are executed by workers.
-pub struct Tasks {
+pub(crate) struct Tasks {
+    /// Incoming connection task
+    connection : TaskStatus,
 
+    /// Reception of clients message.
+    reception : Vec<Option<TaskStatus>>
+}
+
+impl Tasks {
+    /// Create a new tasks registry from maximum client.
+    pub fn new(maximum_client : usize) -> Tasks {
+        let mut reception = Vec::<Option<TaskStatus>>::with_capacity(maximum_client);
+        reception.resize_with(maximum_client, || { None });
+
+        Tasks { connection: TaskStatus::Ready, reception }
+    }
 }

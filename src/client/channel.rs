@@ -21,3 +21,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+use std::sync::mpsc::{Receiver, Sender};
+
+use crate::{Message, client::message::{ClientMessage, WorkerMessage}};
+
+pub struct ClientChannel<IN : Message + Send + 'static, OUT : Message + Send + 'static>{
+    /// Receive of client messages
+    pub rcv_client : Receiver<ClientMessage<IN>>,
+
+    // Sender channel for worker messages
+    pub sdr_worker : Sender<WorkerMessage<OUT>>,
+
+}

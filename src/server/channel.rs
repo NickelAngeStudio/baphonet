@@ -22,55 +22,54 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::TcpListener, sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}}};
+use std::sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}};
 
 use crate::{Message, server::message::{ServerMessage, SupervisorMessage, WorkerMessage}};
 
 /// All server communication channels
-pub(super) struct ServerChannel<IN : Message,OUT : Message> {
+pub(super) struct ServerChannel<IN : Message + Send,OUT : Message + Send> {
 
-    // Sender and receiver channels for server messages
-    pub sdr_server : Sender<ServerMessage<IN>>,
+    /// Receive of server messages
     pub rcv_server : Receiver<ServerMessage<IN>>,
 
-    // Sender and receiver channels for supervisor messages
+    // Sender channel for supervisor messages
     pub sdr_supervisor : Sender<SupervisorMessage>,
-    pub rcv_supervisor : Arc<Receiver<SupervisorMessage>>,
 
-    // Sender and receiver channels for worker messages
+    // Sender channels for worker messages
     pub sdr_worker : Sender<WorkerMessage<OUT>>,
-    pub rcv_worker : Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
 }
 
 
-impl<IN : Message,OUT : Message> ServerChannel<IN, OUT> {
+impl<IN : Message + Send,OUT : Message + Send> ServerChannel<IN, OUT> {
 
     /// Create communication channels used between theads
     /// 
     /// # Returns
     /// New [`ServerChannel`] instance with channels used.
-    pub fn new() -> ServerChannel<IN, OUT> {
-
+    pub fn new() -> (ServerChannel<IN, OUT>, SupervisorChannel<IN, OUT>) {
         let (sdr_server, rcv_server) = mpsc::channel::<ServerMessage<IN>>();
         let (sdr_supervisor, rcv_supervisor) = mpsc::channel::<SupervisorMessage>();
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<OUT>>();
 
-        ServerChannel { sdr_server, rcv_server, sdr_supervisor, 
-            rcv_supervisor: Arc::new(rcv_supervisor), sdr_worker, 
-            rcv_worker: Arc::new(Mutex::new(rcv_worker)) }
+        let sdr_supervisor_clone = sdr_supervisor.clone();
+        let sdr_worker_clone = sdr_worker.clone();
+        let server_channels = ServerChannel{ rcv_server, sdr_supervisor, sdr_worker };
+        let super_channels = SupervisorChannel::new(sdr_server, sdr_supervisor_clone, rcv_supervisor, sdr_worker_clone, rcv_worker);
+
+        (server_channels, super_channels)   
     }
 
 }
 
 /// Supervisor communication channels
-pub(super) struct SupervisorChannel<IN : Message,OUT : Message> {
+pub(crate) struct SupervisorChannel<IN : Message + Send,OUT : Message + Send> {
 
     /// Channel Message sender to server
     pub sdr_server : Sender<ServerMessage<IN>>,
 
     /// Channel Message sender and receiver to supervisor
     pub sdr_supervisor : Sender<SupervisorMessage>,
-    pub rcv_supervisor : Arc<Receiver<SupervisorMessage>>,
+    pub rcv_supervisor : Receiver<SupervisorMessage>,
 
      // Sender and receiver channels for worker messages
     pub sdr_worker : Sender<WorkerMessage<OUT>>,
@@ -78,20 +77,20 @@ pub(super) struct SupervisorChannel<IN : Message,OUT : Message> {
 
 }
 
-impl<IN : Message,OUT : Message> SupervisorChannel<IN,OUT> {
-    pub fn from_server_channels(channels : &ServerChannel<IN,OUT>) -> SupervisorChannel<IN,OUT> {
-        SupervisorChannel { 
-            sdr_server: channels.sdr_server.clone(), 
-            sdr_supervisor: channels.sdr_supervisor.clone(), 
-            rcv_supervisor: channels.rcv_supervisor.clone(), 
-            sdr_worker: channels.sdr_worker.clone(), 
-            rcv_worker: channels.rcv_worker.clone() }
+impl<IN : Message + Send,OUT : Message + Send> SupervisorChannel<IN,OUT> {
+    pub fn new(sdr_server : Sender<ServerMessage<IN>>, sdr_supervisor : Sender<SupervisorMessage>, rcv_supervisor : Receiver<SupervisorMessage>,
+        sdr_worker : Sender<WorkerMessage<OUT>>, rcv_worker : Receiver<WorkerMessage<OUT>>) -> SupervisorChannel<IN, OUT> {
+
+            SupervisorChannel{ sdr_server, sdr_supervisor, rcv_supervisor, sdr_worker, 
+                rcv_worker: Arc::new(Mutex::new(rcv_worker)) }
+
     }
+
 }
 
 
 /// Worker communication channels
-pub(super) struct WorkerChannel<IN : Message,OUT : Message> {
+pub(super) struct WorkerChannel<IN : Message + Send,OUT : Message + Send> {
 
     /// Channel Message sender to server
     pub sdr_server : Sender<ServerMessage<IN>>,
@@ -104,12 +103,10 @@ pub(super) struct WorkerChannel<IN : Message,OUT : Message> {
 
 }
 
-impl<IN : Message,OUT : Message> WorkerChannel<IN,OUT> {
-    pub fn from_supervisor_channels(channels : &SupervisorChannel<IN,OUT>) -> WorkerChannel<IN,OUT> {
-        WorkerChannel { 
-            sdr_server: channels.sdr_server.clone(), 
-            sdr_supervisor: channels.sdr_supervisor.clone(), 
-            rcv_worker: channels.rcv_worker.clone() 
-        }
+impl<IN : Message + Send,OUT : Message + Send> WorkerChannel<IN,OUT> {
+
+    pub fn new(sdr_server : Sender<ServerMessage<IN>>, sdr_supervisor : Sender<SupervisorMessage>, rcv_worker : Arc<Mutex<Receiver<WorkerMessage<OUT>>>>) -> WorkerChannel<IN, OUT> {
+        WorkerChannel { sdr_server, sdr_supervisor, rcv_worker }
     }
+
 }

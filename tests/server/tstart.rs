@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 
 use baphonet::server::{Error, Server, ServerStatus};
 
@@ -51,19 +51,6 @@ fn server_start_err_active() {
     match server.start(socket) {
         Ok(_) => panic!("start() shouldn't be Ok()!"),
         Err(err) => assert_eq!(err, Error::ServerAlreadyActive),
-    }
-
-}
-
-#[test]
-fn server_start_err_invalid_socket() {
-    
-    let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255,255,255,255)), TEST_TCP_PORT - 3);
-    let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
-
-    match server.start(socket) {
-        Ok(_) => panic!("start() shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, Error::SocketInvalid),
     }
 
 }

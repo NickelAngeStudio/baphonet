@@ -1,7 +1,7 @@
 /* 
 Copyright (c) 2026  NickelAnge.Studio 
 Email               mathieu.grenier@nickelange.studio
-Git                 https://codeberg.org/NickelAngeStudio/baphonet
+Git                 https://github.com/NickelAngeStudio/baphonet
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,3 +21,25 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+pub enum Error {
+
+    /// Cant connect to given address. Server might be down.
+    CannotConnectToSocketAddr,
+
+    /// Client is already connected.
+    ClientAlreadyConnected,
+
+    /// Socket given is invalid
+    InvalidSocket,
+
+    /// Happens when server refused connection (ie server is full).
+    ConnectionRefused,
+
+    /// Unhandled IO error
+    UnhandledIOError(std::io::ErrorKind),
+
+    /// Connection to server is lost
+    ConnectionLost,
+    
+}

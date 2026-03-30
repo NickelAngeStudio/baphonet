@@ -21,3 +21,29 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+    ///     - Ok(()) if client is connected to server.
+    ///     - Err([`Error::InvalidSocket`]) if given socket is invalid.
+    ///     - Err([`Error::CannotConnectToSocketAddr`]) if socket address is incorrect or server is down.
+    ///     - Err([`Error::ClientAlreadyConnected`]) if client is already connected.
+    ///     - Err([`Error::ConnectionRefused`]) if server refused client connection.
+
+#[test] 
+fn client_connect_ok() {
+    todo!()
+}
+
+#[test]
+fn client_connect_err_cannot_connect() {
+    todo!()
+}
+
+#[test]
+fn client_connect_err_already_connected() {
+    todo!()
+}
+
+#[test]
+fn client_connect_err_connection_refused() {
+    todo!()
+}

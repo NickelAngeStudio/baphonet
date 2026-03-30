@@ -47,4 +47,10 @@ pub enum Error {
     /// Provided socket address is already used by another process
     SocketAddressAlreadyUsed,
 
+    /// Listener or stream could not be set to non-blocking
+    SetNonblockingFailed,
+
+     /// An unhandled IO error occurred
+    UnhandledIOError(std::io::ErrorKind),
+
 }

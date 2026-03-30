@@ -22,10 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+/// Maximum message size is 65535 bytes (64ko).
+/// 
+/// Message bigger than that should be cut in smaller message.
+pub const MAXIMUM_MESSAGE_SIZE : usize = u16::MAX as usize;
 
 pub mod server;
 pub mod client;
-
 
 /// Message that are sent between server and client.
 /// 
@@ -33,9 +36,14 @@ pub mod client;
 pub trait Message {
     /// Serialize the message into a provided [[u8]] buffer.
     /// 
+    /// # Returns
+    /// - [`Result`]
+    ///     - Ok([`usize`]) which contains the size of bytes serialized.
+    ///     - Err(()) if any error happened while serializing (like a small buffer, etc...)
+    /// 
     /// # Panic
     /// Implementation could [`panic!`] if buffer length is too small. 
-    /// <br>Verify buffer length before serializing and return Err(()) 
+    /// <br>Use buffer length of [`MAXIMUM_MESSAGE_SIZE`] before serializing and return Err(()) 
     /// if too small.
     /// 
     /// Crate Tampon [`bytes_size`](https://docs.rs/tampon/latest/tampon/macro.bytes_size.html) can

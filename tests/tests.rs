@@ -33,12 +33,14 @@ pub struct WorkerCount { pub one : usize, pub some : usize, pub all : usize  }
 pub const WORKER_COUNT : WorkerCount= WorkerCount{ one: 1, some: 4, all: 16 };
 
 /// IPv4 adress used for tests
-pub const TEST_IPV4 : Ipv4Addr = Ipv4Addr::new(127,0,0,1);
+pub const TEST_IPV4 : Ipv4Addr = Ipv4Addr::LOCALHOST;
 
 /// TCP port used for tests
 pub const TEST_TCP_PORT : u16 = 50000;
 
 /// Trait Message implementation tests
 pub mod message;
+
+pub mod client;
 
 mod server;

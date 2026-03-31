@@ -22,15 +22,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{Message, client::message::{ClientMessage, WorkerMessage}};
 
+/// Channels used by [`Client`].
 pub struct ClientChannel<IN : Message + Send + 'static, OUT : Message + Send + 'static>{
-    /// Receive of client messages
+    /// Receiver of client messages
     pub rcv_client : Receiver<ClientMessage<IN>>,
 
     // Sender channel for worker messages
     pub sdr_worker : Sender<WorkerMessage<OUT>>,
+
+}
+
+/// Channels used by [`Worker`].
+pub struct WorkerChannel<IN : Message + Send + 'static, OUT : Message + Send + 'static>{
+    /// Sender of client messages
+    pub sdr_client : Sender<ClientMessage<IN>>,
+
+    // Receiver channel for worker messages
+    pub rcv_worker : Receiver<WorkerMessage<OUT>>,
+
+}
+
+/// Create both [`ClientChannel`] and [`WorkerChannel`].
+pub(crate) fn create_client_worker_channels<IN : Message + Send + 'static, OUT : Message + Send + 'static>() -> (ClientChannel<IN, OUT>, WorkerChannel<IN, OUT>){
+
+    let (sdr_client, rcv_client) = mpsc::channel::<ClientMessage<IN>>();
+    let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<OUT>>();
+
+    (ClientChannel{ rcv_client, sdr_worker }, WorkerChannel{ sdr_client, rcv_worker })
 
 }

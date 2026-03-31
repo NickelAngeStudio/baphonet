@@ -22,10 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#[derive(Debug)]
 pub enum Error {
 
     /// Cant connect to given address. Server might be down.
-    CannotConnectToSocketAddr,
+    ServerNotFound,
 
     /// Client is already connected.
     ClientAlreadyConnected,

@@ -21,3 +21,74 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+use std::net::{IpAddr, SocketAddr};
+
+use baphonet::{client::message, server::{Server, message::{ServerMessage, SupervisorUpdate}}};
+
+use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_port, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
+
+
+
+#[test]
+fn server_message_none() {
+    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+
+    timeout_loop!{
+        match server.message() {
+            Some(_) => {},
+            None => break,
+        }
+    }
+
+}
+
+#[test]
+fn server_message_some_incoming() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_active() {
+    
+    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+
+    timeout_loop!{
+        match server.message() {
+            Some(message) => match message {
+                ServerMessage::Incoming(_) => {},
+                ServerMessage::Update(update) => match update{
+                    SupervisorUpdate::Active => break ,
+                    _ => {},
+                },
+            },
+            None => {},
+        }
+    }
+
+}
+
+#[test]
+fn server_message_update_client_connected() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_client_disconnected() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_client_connection_lost() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_error() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_ended() {
+    todo!()
+}

@@ -78,7 +78,7 @@ pub enum SupervisorMessage {
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorServerMessage {
 
-    /// Tell supervisor to execute jobs
+    /// Tell supervisor to execute tasks
     Execute,
 
     /// Pause the supervisor
@@ -107,7 +107,7 @@ pub enum SupervisorWorkerMessage {
     ReceiveJobDone(ClientId),
 
     /// Client connection closed
-    ConnectionClosed(ClientId),
+    Disconnected(ClientId),
 
     /// Client connection lost
     ConnectionLost(ClientId),
@@ -130,8 +130,8 @@ pub enum WorkerMessage<OUT : Message + Send> {
     /// Send server message to clients
     Send(OUT),
 
-    /// Resume a client, purging stream buffers
-    Resume(ClientId),
+    /// Cleat a client stream buffer
+    Clear(ClientId),
 
     /// Disconnect client
     Disconnect(ClientId),

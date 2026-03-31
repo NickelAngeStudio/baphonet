@@ -22,19 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-//! Server::new()
-//! 
-//! # Verifications
-//! - Ok([`Server`]) on success.
-//! - Err([`ServerError::MaximumClientBelowMinimum`]) if maximum client is below [`SERVER_MINIMUM_CLIENT_CAP`].
-//! - Err([`ServerError::MaximumClientAboveMaximum`]) if maximum  client is above [`SERVER_MAXIMUM_CLIENT_CAP`].
-//! - Err([`ServerError::WorkerCountBelowMinimum`]) if worker count is below [`SERVER_MINIMUM_WORKER_CAP`].
-//! - Err([`ServerError::WorkerCountAboveMaximum`]) if worker count is above `maximum_client` parameter.
-
 use baphonet::server::{Error, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, Server, ServerStatus};
 
-use crate::message::{ClientToServerMessage, ServerToClientMessage};
+use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
+
 
 #[test]
 fn server_new_ok_minimum_client() {

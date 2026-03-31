@@ -26,7 +26,7 @@ use std::net::{IpAddr, SocketAddr};
 
 use baphonet::server::{Error, Server, ServerStatus};
 
-use crate::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, message::{ClientToServerMessage, ServerToClientMessage}};
+use crate::shared::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, message::{ClientToServerMessage, ServerToClientMessage}};
 
 
 #[test]

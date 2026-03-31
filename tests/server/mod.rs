@@ -39,7 +39,7 @@ mod tstop;
 mod tmessage;
 
 /// Tests for Server:close_connection()
-mod tcc;
+mod tclose;
 
 /// Tests for Server::send()
 mod tsend;

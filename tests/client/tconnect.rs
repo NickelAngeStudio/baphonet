@@ -22,11 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-    ///     - Ok(()) if client is connected to server.
-    ///     - Err([`Error::InvalidSocket`]) if given socket is invalid.
-    ///     - Err([`Error::CannotConnectToSocketAddr`]) if socket address is incorrect or server is down.
-    ///     - Err([`Error::ClientAlreadyConnected`]) if client is already connected.
-    ///     - Err([`Error::ConnectionRefused`]) if server refused client connection.
 
 #[test] 
 fn client_connect_ok() {
@@ -34,7 +29,7 @@ fn client_connect_ok() {
 }
 
 #[test]
-fn client_connect_err_cannot_connect() {
+fn client_connect_err_not_found() {
     todo!()
 }
 

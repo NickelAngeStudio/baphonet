@@ -34,12 +34,18 @@ pub enum ClientMessage<IN : Message + Send + 'static> {
     Error(Error),
 
     /// Worker status changed
-    StatusChanged(WorkerStatus)
+    StatusChanged(WorkerStatus),
+
+    /// Worker has finished receiving
+    ReceiveJobDone,
 
 }
 
 /// Message sent to worker from client
 pub enum WorkerMessage<OUT : Message + Send + 'static> {
+
+    /// Receive server messages
+    Receive,
 
     /// Send a message to the server
     Send(OUT),

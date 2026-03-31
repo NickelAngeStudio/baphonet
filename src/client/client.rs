@@ -24,7 +24,17 @@ SOFTWARE.
 
 use std::{net::SocketAddr, thread::JoinHandle};
 
-use crate::{Message, client::{Error, channel::ClientChannel, status::ClientStatus}};
+use crate::{Message, client::{Error, channel::{ClientChannel, create_client_worker_channels}, status::ClientStatus, worker::{self, Worker}}};
+
+/// Status of a task
+pub(crate) enum TaskStatus {
+    /// Task is ready to be executed
+    Ready,
+
+    /// Task is currently in progress
+    InProgress,
+
+}
 
 
 /// Client that connect to a Server
@@ -39,6 +49,8 @@ pub struct Client<IN : Message + Send + 'static,OUT : Message + Send + 'static> 
     /// Current status of the client
     status : ClientStatus,
 
+    /// Message reception task status
+    receive : TaskStatus
 }
 
 impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, OUT> {
@@ -48,7 +60,7 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
     /// # Returns
     /// A new [`Client`]
     pub fn new() -> Client<IN, OUT> {
-        Client { channels: None, worker_handle: None, status: ClientStatus::Disconnected }
+        Client { channels: None, worker_handle: None, status: ClientStatus::Disconnected, receive: TaskStatus::Ready }
     }
 
     /// Connect the client to [`Server`](crate::server::Server) from a [`SocketAddr`].
@@ -57,10 +69,41 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
     /// - [`Result`]
     ///     - Ok(()) if client is connected to server.
     ///     - Err([`Error::InvalidSocket`]) if given socket is invalid.
-    ///     - Err([`Error::CannotConnectToSocketAddr`]) if socket address is incorrect or server is down.
+    ///     - Err([`Error::ServerNotFound`]) if socket address is incorrect or server is down.
     ///     - Err([`Error::ClientAlreadyConnected`]) if client is already connected.
     ///     - Err([`Error::ConnectionRefused`]) if server refused client connection.
     pub fn connect(&mut self, addr : SocketAddr) -> Result<(), Error> {
+        
+        match self.status {
+            ClientStatus::Disconnected => {
+                // Create channels
+                let (client_channels, worker_channels) = create_client_worker_channels::<IN, OUT>();
+
+                match Worker::new(addr, worker_channels) {
+                    Ok(mut worker) => {
+                        self.channels = Some(client_channels);
+                        self.status = ClientStatus::Connecting;
+                        self.worker_handle = Some(std::thread::spawn(move || { worker.execute(); }));
+
+                        Ok(())
+                    },
+                    Err(err) => Err(err),
+                }
+            },
+            _ => Err(Error::ClientAlreadyConnected)
+        }
+
+    }
+
+    pub fn send(&mut self, message : OUT) -> Result<(), Error>{
         todo!()
     }
+
+    
+
+    pub fn close() {
+
+    }
+
+
 }

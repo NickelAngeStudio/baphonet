@@ -37,10 +37,10 @@ pub(crate) enum TaskStatus {
 /// Task that are executed by workers.
 pub(crate) struct Tasks {
     /// Incoming connection task
-    connection : TaskStatus,
+    pub incoming : TaskStatus,
 
     /// Reception of clients message.
-    reception : Vec<Option<TaskStatus>>
+    pub reception : Vec<Option<TaskStatus>>
 }
 
 impl Tasks {
@@ -49,6 +49,6 @@ impl Tasks {
         let mut reception = Vec::<Option<TaskStatus>>::with_capacity(maximum_client);
         reception.resize_with(maximum_client, || { None });
 
-        Tasks { connection: TaskStatus::Ready, reception }
+        Tasks { incoming: TaskStatus::Ready, reception }
     }
 }

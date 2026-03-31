@@ -22,9 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::SocketAddr, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
+use std::{mem, net::SocketAddr, sync::{Arc, Mutex, mpsc::Sender}, thread::{self, JoinHandle}};
 
-use crate::{Message, server::{ ClientId, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, ServerStatus, channel::ServerChannel, client::{Client, Clients, ServerClient}, error::Error, message::{OutgoingMessage, ServerMessage}, supervisor::Supervisor}};
+use crate::{Message, server::{ ClientId, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, ServerStatus, channel::ServerChannel, client::{Client, Clients, ServerClient}, error::Error, message::{OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate}, supervisor::Supervisor}};
 
 
 
@@ -47,7 +47,10 @@ pub struct Server<IN : Message + Send + 'static,OUT : Message + Send + 'static> 
     status : ServerStatus,
 
     /// Supervisor thread handle
-    supervisor_handle : Option<JoinHandle<()>>
+    supervisor_handle : Option<JoinHandle<()>>,
+
+    /// Supervisor execute tasks flag
+    send_execute_tasks : bool,
 
 }
 
@@ -82,7 +85,7 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
 
         // Return new created server
         Ok(Server { maximum_client, worker_count, clients : Arc::new(clients),
-            status: ServerStatus::Inactive, channels : None, supervisor_handle : None })
+            status: ServerStatus::Inactive, channels : None, supervisor_handle : None, send_execute_tasks : true })
     }
 
     /// Start the server at specified socketr address.
@@ -109,14 +112,45 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
         self.status
     }
 
-    /// Get message from supervisor and workers. 
+    /// Get incoming client message and/or server update.
     /// 
     /// Returns :
     /// - [`Result`]:
     ///     - Ok(Some([`ServerMessage`])) if message found.
     ///     - Ok(None) if no message found.
     pub fn message(&mut self) -> Option<ServerMessage<IN>> {
-        todo!()
+
+        match self.channels.as_mut() {
+            Some(channels) => {
+                if self.send_execute_tasks {
+                    match channels.sdr_supervisor.send(SupervisorMessage::FromServer(SupervisorServerMessage::Execute)){
+                        Ok(_) => {},
+                        Err(_) => todo!(),  // TODO: handle server channel lost #13
+                    }
+                    self.send_execute_tasks = false;
+                }
+                
+                match channels.rcv_server.try_recv() {
+                    Ok(message) => {
+                        match &message {
+                            ServerMessage::Update(supervisor_update) => match supervisor_update{
+                                SupervisorUpdate::Active => self.status = ServerStatus::Active,
+                                _ => {}
+                            },
+                            _ => {},
+                        }
+                        Some(message)
+                    },
+                    Err(_) => {
+                        self.send_execute_tasks = true; // Make next call trigger send execute tasks
+                        None
+                    },
+                }
+            },
+            None => None,
+        }
+        
+
     }
 
     /// Get list of currently connected clients

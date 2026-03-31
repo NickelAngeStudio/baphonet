@@ -22,13 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::net::{IpAddr, SocketAddr};
-
-use baphonet::{client::message, server::{Server, message::{ServerMessage, SupervisorUpdate}}};
-
+use baphonet::server::message::{ServerMessage, SupervisorUpdate};
 use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_port, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
-
-
 
 #[test]
 fn server_message_none() {
@@ -80,11 +75,6 @@ fn server_message_update_client_disconnected() {
 
 #[test]
 fn server_message_update_client_connection_lost() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error() {
     todo!()
 }
 

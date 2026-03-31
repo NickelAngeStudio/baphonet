@@ -40,6 +40,12 @@ pub(crate) struct Client {
 
 }
 
+impl Client {
+    pub fn new(stream : TcpStream) -> Client {
+        Client { stream, inc_msg_size:None }
+    }
+}
+
 /// A client of the server given from [`Server::clients()`](super::Server::clients());
 pub struct ServerClient {
     client_id : ClientId,

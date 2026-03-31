@@ -23,8 +23,7 @@ SOFTWARE.
 */
 
 
-use crate::{Message, server::{ClientId, status::SupervisorStatus, worker::WorkerId}};
-use super::Error;
+use crate::{Message, server::{ClientId, worker::WorkerId}};
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
@@ -54,8 +53,8 @@ pub enum SupervisorUpdate {
     /// Lost connection to client id
     ClientConnectionLost(ClientId),
 
-    /// An error occurred.
-    Error(Error),
+    /// Server is currently full
+    Full,
 
     /// Supervisor has ended
     Ended,
@@ -118,7 +117,7 @@ pub enum SupervisorWorkerMessage {
 }
 
 /// Message sent to and received by worker
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum WorkerMessage<OUT : Message + Send> {
 
     /// Handle incoming connection to server
@@ -128,7 +127,7 @@ pub enum WorkerMessage<OUT : Message + Send> {
     Receive(ClientId),
 
     /// Send server message to clients
-    Send(OUT),
+    Send(OutgoingMessage<OUT>),
 
     /// Cleat a client stream buffer
     Clear(ClientId),

@@ -90,7 +90,7 @@ impl<IN : Message + Send,OUT : Message + Send> SupervisorChannel<IN,OUT> {
 
 
 /// Worker communication channels
-pub(super) struct WorkerChannel<IN : Message + Send,OUT : Message + Send> {
+pub(crate) struct WorkerChannel<IN : Message + Send,OUT : Message + Send> {
 
     /// Channel Message sender to server
     pub sdr_server : Sender<ServerMessage<IN>>,

@@ -41,7 +41,38 @@ pub enum ErrorClient {
     /// Unhandled IO error
     UnhandledIOError(std::io::ErrorKind),
 
-    /// Connection to server is lost
-    ConnectionLost,
+    /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
+    PoolRateBelowMinimum,
+
+    /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
+    PoolRateAboveMaximum,
+
+    /// Error happened while trying to join worker thread
+    ClientCloseJoinError,
     
+    /// Unexpected error happened during close
+    ClientCloseUnexpectedError,
+
+    /// Client took too much time closing connection.
+    ClientCloseTimeout,
+    
+}
+/// Possible [`Worker`](super::Worker) error
+#[derive(Debug, PartialEq)]
+pub enum ErrorWorker {
+
+    /// Outgoing message serialize failed
+    OutgoingSerializeError,
+
+    /// Outgoing message is larger than [`MAXIMUM_MESSAGE_SIZE`](super::super::MAXIMUM_MESSAGE_SIZE).
+    OutgoingMessageTooLarge,
+
+    /// Connection to server lost
+    ConnectionLost,
+
+    /// Incoming message from server is larger than [`MAXIMUM_MESSAGE_SIZE`](super::super::MAXIMUM_MESSAGE_SIZE).
+    IncomingMessageTooLarge,
+
+    /// An error occured while deserializing incoming message
+    IncomingMessageError,
 }

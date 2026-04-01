@@ -24,7 +24,7 @@ SOFTWARE.
 
 use std::{io::{Read, Write}, net::{Shutdown, TcpListener, TcpStream}, sync::{Arc, Mutex, MutexGuard}};
 
-use crate::{MAXIMUM_MESSAGE_SIZE, Message, client, server::{ClientId, ErrorUpdate, SIZE_OF_CLIENT_ID, channel::WorkerChannel, client::{Client, Clients}, message::{IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorWorkerMessage, WorkerMessage}, status::WorkerStatus}};
+use crate::{MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE, client, server::{ClientId, ErrorUpdate, channel::WorkerChannel, client::{Client, Clients}, message::{IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorWorkerMessage, WorkerMessage}, status::WorkerStatus}};
 
 
 pub(crate) type WorkerId = usize;
@@ -258,9 +258,9 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
         match client.inc_msg_size {
             Some(size) => Some(size),   // If size is already read, keep it
             None => {
-                match client.stream.read_exact(&mut buffer[..SIZE_OF_CLIENT_ID]) {
+                match client.stream.read_exact(&mut buffer[..SIZE_OF_MESSAGE_SIZE]) {
                     Ok(_) => {
-                        let size = u16::from_le_bytes(buffer[..SIZE_OF_CLIENT_ID].try_into().unwrap()) as usize;
+                        let size = u16::from_le_bytes(buffer[..SIZE_OF_MESSAGE_SIZE].try_into().unwrap()) as usize;
 
                         if size <= MAXIMUM_MESSAGE_SIZE {
                             Some(size)

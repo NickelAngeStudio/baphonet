@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+/// Bytes length of the size of messages.
+pub(crate) const SIZE_OF_MESSAGE_SIZE : usize = size_of::<u16>();
 
 /// Maximum message size is 65535 bytes (64ko).
 /// 

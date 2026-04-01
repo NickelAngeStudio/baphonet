@@ -42,7 +42,7 @@ pub enum ClientStatus {
 
 /// Possible statuses of the worker thread
 #[derive(Debug)]
-pub(crate) enum WorkerStatus {
+pub enum WorkerStatus {
 
     /// Worker thread is starting
     Starting,

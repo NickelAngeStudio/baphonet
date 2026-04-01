@@ -52,8 +52,7 @@ pub use server::Server as Server;
 pub type ClientId = u16;
 
 
-/// Bytes length of the size of [`ClientId`]
-pub const SIZE_OF_CLIENT_ID : usize = size_of::<ClientId>();
+
 
 /// Current minimum client cap
 pub const SERVER_MINIMUM_CLIENT_CAP : usize = 1;
@@ -66,6 +65,9 @@ pub const SERVER_MINIMUM_WORKER_CAP : usize = 1;
 
 /// Default pool rate of the supervisor worker per second.
 /// Each pool look for connection and receive incoming messages.
+/// 
+/// Higher pool rate will consume more resources and could be
+/// necessary for action game.
 /// 
 /// Pool rate can be overriden via [`Server::set_pool_rate()`].
 pub const POOL_RATE_PER_SECOND : u64 = 10;

@@ -22,20 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::SocketAddr, thread::JoinHandle};
+use std::{net::SocketAddr, thread::JoinHandle, time::{Duration, Instant}};
 
-use crate::{Message, client::{ErrorClient, channel::{ClientChannel, create_client_worker_channels}, status::ClientStatus, worker::{self, Worker}}};
+use crate::{Message, client::{ErrorClient, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_POOL_RATE_PER_SECOND, POOL_RATE_PER_SECOND, channel::{ClientChannel, create_client_worker_channels}, message::{ClientMessage, WorkerMessage}, status::ClientStatus, worker::Worker}};
 
-/// Status of a task
-pub(crate) enum TaskStatus {
-    /// Task is ready to be executed
-    Ready,
-
-    /// Task is currently in progress
-    InProgress,
-
-}
-
+/// Wait a maximum of 100 milliseconds to join worker thread.
+const MS_JOIN_WAIT_FOR_WORKER : u64 = 100;
 
 /// Client that connect to a Server
 pub struct Client<IN : Message + Send + 'static,OUT : Message + Send + 'static>  {
@@ -49,8 +41,8 @@ pub struct Client<IN : Message + Send + 'static,OUT : Message + Send + 'static> 
     /// Current status of the client
     status : ClientStatus,
 
-    /// Message reception task status
-    receive : TaskStatus
+    /// Worker pool rate
+    pool_rate : u64
 }
 
 impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, OUT> {
@@ -60,7 +52,52 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
     /// # Returns
     /// A new [`Client`]
     pub fn new() -> Client<IN, OUT> {
-        Client { channels: None, worker_handle: None, status: ClientStatus::Disconnected, receive: TaskStatus::Ready }
+        Client { channels: None, worker_handle: None, status: ClientStatus::Disconnected, pool_rate : POOL_RATE_PER_SECOND }
+    }
+
+    /// Set the number of pool made per second. This can be set anytime.
+    /// 
+    /// Each pool try to receive incoming messages.
+    /// 
+    /// Higher pool rate will consume more resources and could be
+    /// necessary for action game. (30 or 60 should be good for action).
+    /// 
+    /// # Returns
+    /// - [`Result`]
+    ///     - Ok(()) if pool rate was changed with success.
+    ///     - Err([`ErrorClient::PoolRateBelowMinimum`]) if pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
+    ///     - Err([`ErrorClient::PoolRateAboveMaximum`]) if pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
+    pub fn set_pool_rate(&mut self, pool_rate : u64) -> Result<(),ErrorClient> {
+
+        if pool_rate < MINIMUM_POOL_RATE_PER_SECOND {
+            return Err(ErrorClient::PoolRateBelowMinimum)
+        }
+
+        if pool_rate > MAXIMUM_POOL_RATE_PER_SECOND {
+            return Err(ErrorClient::PoolRateAboveMaximum)
+        }
+
+        match self.channels.as_mut() {
+            Some(channels) => {
+                match channels.sdr_worker.send(WorkerMessage::PoolRate(pool_rate)){
+                    Ok(_) => {
+                        self.pool_rate = pool_rate;
+                        Ok(())
+                    },
+                    Err(_) => todo!(),  // TODO: handle client channel lost #13
+                }
+            },
+            None => {
+                self.pool_rate = pool_rate;
+                Ok(())
+            },
+        }
+
+    }
+
+    /// Current pool rate of the client.
+    pub fn pool_rate(&self) -> u64 {
+        self.pool_rate
     }
 
     /// Connect the client to [`Server`](crate::server::Server) from a [`SocketAddr`].
@@ -68,10 +105,10 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
     /// # Returns
     /// - [`Result`]
     ///     - Ok(()) if client is connected to server.
-    ///     - Err([`Error::InvalidSocket`]) if given socket is invalid.
-    ///     - Err([`Error::ServerNotFound`]) if socket address is incorrect or server is down.
-    ///     - Err([`Error::ClientAlreadyConnected`]) if client is already connected.
-    ///     - Err([`Error::ConnectionRefused`]) if server refused client connection.
+    ///     - Err([`ErrorClient::InvalidSocket`]) if given socket is invalid.
+    ///     - Err([`ErrorClient::ServerNotFound`]) if socket address is incorrect or server is down.
+    ///     - Err([`ErrorClient::ClientAlreadyConnected`]) if client is already connected.
+    ///     - Err([`ErrorClient::ConnectionRefused`]) if server refused client connection.
     pub fn connect(&mut self, addr : SocketAddr) -> Result<(), ErrorClient> {
         
         match self.status {
@@ -79,7 +116,7 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
                 // Create channels
                 let (client_channels, worker_channels) = create_client_worker_channels::<IN, OUT>();
 
-                match Worker::new(addr, worker_channels) {
+                match Worker::new(addr, self.pool_rate, worker_channels) {
                     Ok(mut worker) => {
                         self.channels = Some(client_channels);
                         self.status = ClientStatus::Connecting;
@@ -95,15 +132,100 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
 
     }
 
+    pub fn message(&mut self) -> Option<ClientMessage<IN>> {
+        todo!()
+    }
+
     pub fn send(&mut self, message : OUT) -> Result<(), ErrorClient>{
         todo!()
     }
 
     
-
-    pub fn close() {
+    /// Close the connection to the server and join worker thread.
+    /// 
+    /// Close should ALWAYS be called before closing program.
+    /// 
+    /// Returns :
+    /// - [`Result`]:
+    ///     - Ok(()) if close was successful.
+    ///     - Err([`ErrorClient::ClientCloseJoinError`]) if client took too much time to shutdown.
+    ///     - Err([`ErrorClient::ClientCloseUnexpectedError`]) if thread join resulted in error.
+    ///     - Err([`ErrorClient::ClientCloseTimeout`]) if unexpected error happened.
+    pub fn close(&mut self) -> Result<(), ErrorClient>{
+        
+        match self.channels.as_mut() {
+            Some(channels) => match channels.sdr_worker.send(WorkerMessage::Stop) {
+                Ok(_) => {
+                    self.status = ClientStatus::Disconnecting;
+                    self.join_thread_timeout()
+                },
+                Err(_) => todo!(),  // TODO: Handle channel lost #13
+            },
+            None => Ok(()), // Server already stopped
+        }
 
     }
 
 
+    /// Shutdown worker threads
+    /// 
+    /// Returns :
+    /// - [`Result`]:
+    ///     - Ok(()) if close was successful.
+    ///     - Err([`ErrorClient::ClientCloseJoinError`]) if client took too much time to shutdown.
+    ///     - Err([`ErrorClient::ClientCloseUnexpectedError`]) if thread join resulted in error.
+    ///     - Err([`ErrorClient::ClientCloseTimeout`]) if unexpected error happened.
+    #[inline]
+    fn join_thread_timeout(&mut self) -> Result<(),ErrorClient> {
+
+        let join_wait_duration = Duration::from_millis(MS_JOIN_WAIT_FOR_WORKER);
+        let ts = Instant::now();
+
+        'join:
+        loop {
+            match self.worker_handle.as_ref() {
+                Some(th) => {
+                    if th.is_finished() {   // If thread is finished, join it.
+                        match self.worker_handle.take(){
+                            Some(th) => {
+                                match th.join(){
+                                    Ok(_) => {
+                                        
+                                        break 'join;
+                                    },
+                                    Err(_) => return Err(ErrorClient::ClientCloseJoinError),
+                                }
+                                
+                            },
+                            None => return Err(ErrorClient::ClientCloseUnexpectedError), // Should never happens
+                        };
+                    }
+                },
+                None => return Err(ErrorClient::ClientCloseUnexpectedError), // Should never happens
+            }
+
+            if ts.elapsed() > join_wait_duration { // Join took too long
+                return Err(ErrorClient::ClientCloseTimeout)
+            }
+        }
+
+        // Remove channels
+        self.channels = None;
+        self.status = ClientStatus::Disconnected;
+        Ok(())
+
+    }
+
+
+}
+
+/// Drop implemented only for Debug. Will warn of client not closing connection properly.
+#[cfg(debug_assertions)]
+impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Drop for Client<IN, OUT> {
+    fn drop(&mut self) {
+        match self.channels.as_mut() {
+            Some(_) => eprintln!("Client::close() should be called before program end!"),
+            None => {},
+        }
+    }
 }

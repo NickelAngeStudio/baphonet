@@ -153,6 +153,13 @@ pub fn create_connect_clients<IN : Message + Send + 'static, OUT : Message + Sen
     clients
 }
 
+/// Close clients from vector
+pub fn close_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(clients : &mut Vec<Client<IN, OUT>>) {
+    for client in clients {
+        client.close().unwrap()
+    }
+}
+
 /// Accumulate total from start to end
 pub fn accumulate(end : usize) -> usize{
     let mut total : usize = 0;

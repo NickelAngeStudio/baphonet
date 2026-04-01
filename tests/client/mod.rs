@@ -24,3 +24,6 @@ SOFTWARE.
 
 /// Test for Client::connect()
 mod tconnect;
+
+/// Tests for Client pool rate
+mod tpoolrate;

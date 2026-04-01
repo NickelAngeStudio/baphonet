@@ -114,6 +114,9 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
     /// 
     /// Each pool look for connection and receive incoming messages.
     /// 
+    /// Higher pool rate will consume more resources and could be
+    /// necessary for action game. (30 or 60 should be good).
+    /// 
     /// # Returns
     /// - [`Result`]
     ///     - Ok(()) if pool rate was changed with success.
@@ -292,7 +295,7 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
     ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
     ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
     #[inline]
-    pub(super)  fn join_threads_timeout(&mut self) -> Result<(),ErrorServer> {
+    fn join_threads_timeout(&mut self) -> Result<(),ErrorServer> {
 
         let join_wait_duration = Duration::from_millis(MS_JOIN_WAIT_DURATION_PER_WORKER * (1 + (self.maximum_client as u64)));
         let ts = Instant::now();
@@ -306,8 +309,6 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
                             Some(th) => {
                                 match th.join(){
                                     Ok(_) => {
-                                        // Remove channels
-                                        self.channels = None;
                                         break 'join;
                                     },
                                     Err(_) => return Err(ErrorServer::ServerStopJoinError),
@@ -326,6 +327,8 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
             }
         }
 
+        // Remove channels
+        self.channels = None;
         self.status = ServerStatus::Inactive;
         Ok(())
 

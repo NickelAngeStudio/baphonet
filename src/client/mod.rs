@@ -38,3 +38,19 @@ pub(crate) mod worker;
 
 pub use error::ErrorClient as ErrorClient;
 pub use client::Client as Client;
+
+
+/// Default pool rate of the client worker per second
+/// used to receive message from server.
+/// 
+/// Higher pool rate will consume more resources and could be
+/// necessary for action game.
+/// 
+/// Pool rate can be overriden via [`Client::set_pool_rate()`].
+pub const POOL_RATE_PER_SECOND : u64 = 10;
+
+/// Minimum pool rate that can be set.
+pub const MINIMUM_POOL_RATE_PER_SECOND : u64 = 1;
+
+/// Maximum pool rate that can be set.
+pub const MAXIMUM_POOL_RATE_PER_SECOND : u64 = 1000;

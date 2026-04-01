@@ -41,6 +41,9 @@ pub enum ErrorServer {
     /// Server worker count is above maximum client allowed.
     WorkerCountAboveMaximum,
 
+    /// Server is currently inactive
+    ServerInactive,
+
     /// Server is already active
     ServerAlreadyActive,
 
@@ -55,6 +58,15 @@ pub enum ErrorServer {
 
     /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
     PoolRateAboveMaximum,
+
+    /// Error happened while trying to join supervisor thread
+    ServerStopJoinError,
+    
+    /// Unexpected error happened during stop
+    ServerStopUnexpectedError,
+
+    /// Server took too much time stopping.
+    ServerStopTimeout,
 
      /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),

@@ -22,11 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::SocketAddr, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
+use std::{net::SocketAddr, sync::{Arc, Mutex}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 
 use crate::{Message, server::{ ClientId, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_POOL_RATE_PER_SECOND, POOL_RATE_PER_SECOND, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, ServerStatus, channel::ServerChannel, client::{Client, Clients, ServerClient}, error::ErrorServer, message::{OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate}, supervisor::Supervisor}};
 
-
+/// Milliseconds of wait time per worker.
+const MS_JOIN_WAIT_DURATION_PER_WORKER : u64 = 10;
 
 /// Server end of baphonet
 pub struct Server<IN : Message + Send + 'static,OUT : Message + Send + 'static> {
@@ -265,12 +266,69 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
     /// Returns :
     /// - [`Result`]:
     ///     - Ok(()) if stop was sent to thread.
-    ///     - Err([`Error::ServerInactive`]) if server hasn't started.
-    ///     - Err([`Error::ServerShutdownTimeout`]) if server took too much time to shutdown.
-    ///     - Err([`Error::ServerJoinThreadError`]) if thread join resulted in error.
-    ///     - Err([`Error::Unexpected`]) if unexpected error happened.
+    ///     - Err([`ErrorServer::ServerStopTimeout`]) if server took too much time to shutdown.
+    ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
+    ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
     pub fn stop(&mut self) -> Result<(),ErrorServer> {
-        todo!()
+        
+        match self.channels.as_mut() {
+            Some(channels) => match channels.sdr_supervisor.send(SupervisorMessage::FromServer(SupervisorServerMessage::Stop)) {
+                Ok(_) => {
+                    self.status = ServerStatus::Ending;
+                    self.join_threads_timeout()
+                },
+                Err(_) => todo!(),  // TODO: Handle channel lost #13
+            },
+            None => Ok(()), // Server already stopped
+        }
+    }
+
+    /// Shutdown server threads
+    /// 
+    /// Returns :
+    /// - [`Result`]:
+    ///     - Ok(()) if all threads joined.
+    ///     - Err([`ErrorServer::ServerStopTimeout`]) if server took too much time to join threads.
+    ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
+    ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
+    #[inline]
+    pub(super)  fn join_threads_timeout(&mut self) -> Result<(),ErrorServer> {
+
+        let join_wait_duration = Duration::from_millis(MS_JOIN_WAIT_DURATION_PER_WORKER * (1 + (self.maximum_client as u64)));
+        let ts = Instant::now();
+
+        'join:
+        loop {
+            match self.supervisor_handle.as_ref() {
+                Some(th) => {
+                    if th.is_finished() {   // If thread is finished, join it.
+                        match self.supervisor_handle.take(){
+                            Some(th) => {
+                                match th.join(){
+                                    Ok(_) => {
+                                        // Remove channels
+                                        self.channels = None;
+                                        break 'join;
+                                    },
+                                    Err(_) => return Err(ErrorServer::ServerStopJoinError),
+                                }
+                                
+                            },
+                            None => return Err(ErrorServer::ServerStopUnexpectedError), // Should never happens
+                        };
+                    }
+                },
+                None => return Err(ErrorServer::ServerStopUnexpectedError), // Should never happens
+            }
+
+            if ts.elapsed() > join_wait_duration { // Join took too long
+                return Err(ErrorServer::ServerStopTimeout)
+            }
+        }
+
+        self.status = ServerStatus::Inactive;
+        Ok(())
+
     }
 
     /// Create the supervisor thread
@@ -297,4 +355,15 @@ impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Server<IN, OU
 
     }
 
+}
+
+/// Drop implemented only for Debug. Will warn of server not shutting down properly.
+#[cfg(debug_assertions)]
+impl<IN : Message + Send + 'static,OUT : Message + Send + 'static> Drop for Server<IN, OUT> {
+    fn drop(&mut self) {
+        match self.channels.as_mut() {
+            Some(_) => eprintln!("Server::stop() should be called before program end!"),
+            None => {},
+        }
+    }
 }

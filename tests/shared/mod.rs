@@ -100,6 +100,27 @@ pub fn create_server_and_clients<IN : Message + Send + 'static, OUT : Message + 
 }
 
 /// Will create and start a server while finding a free port
+pub fn create_server_and_clients_default<IN : Message + Send + 'static, OUT : Message + Send + 'static>(client_count : usize) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
+
+    let mut server = Server::<IN, OUT>::new(CLIENT_SIZE.all, WORKER_COUNT.all).unwrap();
+    let mut port : u16 = TEST_TCP_PORT;
+    
+
+    timeout_loop! {
+        let socket = create_test_socket(port);
+
+        match server.start(socket) {
+            Ok(_) => break,
+            Err(_) => port += 1,
+        }
+    }
+
+    let clients = create_connect_clients(client_count, port);
+
+    (server, clients)
+}
+
+/// Will create and start a server while finding a free port
 pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Send + 'static>(max_client : usize, worker_count : usize) -> (Server<IN, OUT>, u16) {
 
     let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
@@ -130,4 +151,15 @@ pub fn create_connect_clients<IN : Message + Send + 'static, OUT : Message + Sen
     }
 
     clients
+}
+
+/// Accumulate total from start to end
+pub fn accumulate(end : usize) -> usize{
+    let mut total : usize = 0;
+
+    for i in 0..end {
+        total += i;
+    }
+
+    total
 }

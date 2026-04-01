@@ -39,6 +39,8 @@ fn server_start_ok() {
         Ok(_) => assert_eq!(server.status(), ServerStatus::Starting),
         Err(err) => panic!("start() shouldn't err({:?})", err),
     }
+
+    server.stop().unwrap();
 }
 
 #[test]
@@ -53,6 +55,7 @@ fn server_start_err_active() {
         Err(err) => assert_eq!(err, ErrorServer::ServerAlreadyActive),
     }
 
+    server.stop().unwrap();
 }
 
 #[test]
@@ -67,4 +70,7 @@ fn server_start_err_address_already_used() {
         Ok(_) => panic!("start() shouldn't be Ok()!"),
         Err(err) => assert_eq!(err, ErrorServer::SocketAddressAlreadyUsed),
     }
+
+    server1.stop().unwrap();
+    server2.stop().unwrap();
 }

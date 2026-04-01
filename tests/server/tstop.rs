@@ -21,3 +21,48 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+
+use crate::shared::{CLIENT_SIZE, create_server_and_clients_default, message::{ClientToServerMessage, ServerToClientMessage}};
+
+
+#[test]
+fn server_stop_ok_client_none() {
+    let (mut server, _clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.none);
+
+    match server.stop() {
+        Ok(_) => {},
+        Err(err) => panic!("Shouldn't be err({:?})", err),
+    }
+}
+
+#[test]
+fn server_stop_ok_client_one() {
+        let (mut server, _clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.one);
+
+
+    match server.stop() {
+        Ok(_) => {},
+        Err(err) => panic!("Shouldn't be err({:?})", err),
+    }
+}
+
+#[test]
+fn server_stop_ok_client_some() {
+    let (mut server, _clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.some);
+
+    match server.stop() {
+        Ok(_) => {},
+        Err(err) => panic!("Shouldn't be err({:?})", err),
+    }
+}
+
+#[test]
+fn server_stop_ok_client_all() {
+    let (mut server, _clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all);
+
+    match server.stop() {
+        Ok(_) => {},
+        Err(err) => panic!("Shouldn't be err({:?})", err),
+    }
+}

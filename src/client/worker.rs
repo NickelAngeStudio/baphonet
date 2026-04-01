@@ -141,7 +141,7 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static> Worker<IN, O
         #[cfg(debug_assertions)]
         {
             match &msg { // Print error in debug mode
-                ClientMessage::Error(err) => println!("{:?}", err),
+                ClientMessage::Error(err) => println!("Client Worker {:?}", err),
                 _ => {},
             }
         }

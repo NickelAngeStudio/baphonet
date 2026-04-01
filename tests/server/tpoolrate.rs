@@ -33,9 +33,11 @@ use crate::{shared::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, messag
 #[test]
 fn server_pool_rate_default() {
     
-    let server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
+    let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
 
     assert_eq!(server.pool_rate(), POOL_RATE_PER_SECOND);
+
+    server.stop().unwrap();
 
 }
 
@@ -47,6 +49,8 @@ fn server_pool_rate_set_before_start_ok() {
         server.set_pool_rate(pool_rate).unwrap();
         assert_eq!(server.pool_rate(), pool_rate);
     }
+
+    server.stop().unwrap();
     
 
 }
@@ -77,6 +81,7 @@ fn server_pool_rate_set_after_start_ok() {
             }
         }
     }
+    server.stop().unwrap();
 
 }
 
@@ -90,6 +95,8 @@ fn server_pool_rate_set_err_below_min() {
         Err(err) => assert_eq!(err, ErrorServer::PoolRateBelowMinimum),
     }
 
+    server.stop().unwrap();
+
 }
 
 #[test]
@@ -100,4 +107,6 @@ fn server_pool_rate_set_err_above_max() {
         Ok(_) => panic!("Shouldn't be Ok()!"),
         Err(err) => assert_eq!(err, ErrorServer::PoolRateAboveMaximum),
     }
+
+    server.stop().unwrap();
 }

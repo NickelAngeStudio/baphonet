@@ -32,11 +32,11 @@ mod tstart;
 /// Tests for Server::set_pool_rate()
 mod tpoolrate;
 
-/// Tests for Server::clients()
-mod tclients;
-
 /// Tests for Server::stop()
 mod tstop;
+
+/// Tests for Server::clients()
+mod tclients;
 
 /// Tests for Server::message()
 mod tmessage;

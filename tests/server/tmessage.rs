@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use baphonet::{client::Client, server::message::{ServerMessage, SupervisorUpdate}};
-use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_clients, create_server_and_port, create_test_socket, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
+use baphonet::server::{ClientId, message::{ServerMessage, SupervisorUpdate}};
+use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, accumulate, create_server_and_clients, create_server_and_port, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
 
 #[test]
 fn server_message_none() {
@@ -39,7 +39,17 @@ fn server_message_none() {
 }
 
 #[test]
-fn server_message_some_incoming() {
+fn server_message_some_incoming_one_client() {
+    todo!()
+}
+
+#[test]
+fn server_message_some_incoming_some_client() {
+    todo!()
+}
+
+#[test]
+fn server_message_some_incoming_all_client() {
     todo!()
 }
 
@@ -65,34 +75,60 @@ fn server_message_update_active() {
 
 #[test]
 fn server_message_update_client_connected_one() {
-    
-    let (mut server, _clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all, CLIENT_SIZE.one);
-    
-    timeout_loop!{
-        match server.message() {
-            Some(msg) => match msg {
-                ServerMessage::Update(update) => {
-                    match update {
-                        SupervisorUpdate::ClientConnected(client_id) => {
-                            assert_eq!(client_id, 0);
-                            break;   
-                        },
-                        _ => {},
-                    }
-                },
-                _ => {},
-            },
-            None => {},
-        }
-    }
+    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.one);
+    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.one);
+    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.one);
+}
 
 
+#[test]
+fn server_message_update_client_connected_some() {
+    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.some);
+    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.some);
+    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.some);
 }
 
 #[test]
-fn server_message_update_client_disconnected() {
+fn server_message_update_client_connected_all() {
+    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.all);
+    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.all);
+    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.all);
+}
+
+
+
+#[test]
+fn server_message_update_client_disconnected_one() {
+    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.one);
+    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.one);
+    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.one);
+}
+
+#[test]
+fn server_message_update_client_disconnected_some() {
+    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.some);
+    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.some);
+    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.some);
+}
+
+#[test]
+fn server_message_update_client_disconnected_all() {
+    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.all);
+    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.all);
+    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.all);
+}
+
+#[test]
+fn server_message_update_pool_rate() {
     todo!()
 }
+
+
+#[test]
+fn server_message_update_full() {
+    todo!()
+}
+
 
 #[test]
 fn server_message_update_error_connection_lost() {
@@ -124,3 +160,69 @@ fn server_message_update_error_incoming_deserialize_error() {
 fn server_message_update_ended() {
     todo!()
 }
+
+/// Receive client connected update and add them up.
+fn server_message_update_client_connected(worker_count : usize, count : usize){
+    let (mut server, clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, worker_count, count);
+    
+    let total_client_id : usize = accumulate(clients.len());
+    let mut sum_client_id : usize = 0;
+    timeout_loop!{
+        match server.message() {
+            Some(msg) => match msg {
+                ServerMessage::Update(update) => {
+                    match update {
+                        SupervisorUpdate::ClientConnected(client_id) => {
+                            sum_client_id += client_id as usize;
+                            if sum_client_id == total_client_id {
+                                break;   
+                            }
+                        },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    server.stop().unwrap();
+}
+
+
+/// Receive client connected update and add them up.
+fn server_message_update_client_disconnected(worker_count : usize, count : usize){
+    let (mut server, clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, worker_count, count);
+    
+    let total_client_id : usize = accumulate(clients.len());
+    let mut sum_client_id : usize = 0;
+
+    // Close each connection
+    for i in 0..clients.len() {
+        server.close_connection(i as ClientId).unwrap();
+    }
+
+    timeout_loop!{
+        match server.message() {
+            Some(msg) => match msg {
+                ServerMessage::Update(update) => {
+                    match update {
+                        SupervisorUpdate::ClientDisconnected(client_id) => {
+                            sum_client_id += client_id as usize;
+                            if sum_client_id == total_client_id {
+                                break;   
+                            }
+                        },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    server.stop().unwrap();
+}
+

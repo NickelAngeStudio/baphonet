@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 
-use crate::{Message, server::{ClientId, worker::WorkerId}};
+use crate::{Message, server::{ClientId, error::ErrorUpdate, worker::WorkerId}};
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
@@ -50,8 +50,11 @@ pub enum SupervisorUpdate {
     /// A client disconnected with Id
     ClientDisconnected(ClientId),
 
-    /// Lost connection to client id
-    ClientConnectionLost(ClientId),
+    /// An error occurred
+    Error(ErrorUpdate),
+
+    /// Server pool rate changed
+    PoolRate(u64),
 
     /// Server is currently full
     Full,
@@ -77,8 +80,8 @@ pub enum SupervisorMessage {
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorServerMessage {
 
-    /// Tell supervisor to execute tasks
-    Execute,
+    /// Modify pool rate per second of the supervisor
+    PoolRate(u64),
 
     /// Pause the supervisor
     Pause,
@@ -108,8 +111,8 @@ pub enum SupervisorWorkerMessage {
     /// Client connection closed
     Disconnected(ClientId),
 
-    /// Client connection lost
-    ConnectionLost(ClientId),
+    /// An error occurred
+    Error(ErrorUpdate),
 
     /// Worker thread ended execution
     Finished(WorkerId)
@@ -142,8 +145,8 @@ pub enum WorkerMessage<OUT : Message + Send> {
 /// Outgoing message sent by server to client.
 #[derive(Debug, Clone)]
 pub struct OutgoingMessage<OUT : Message + Send> {
-    destinations : Vec<ClientId>,
-    message : OUT
+    pub(crate)  destinations : Vec<ClientId>,
+    pub(crate)  message : OUT
 }
 
 impl<OUT : Message + Send> OutgoingMessage<OUT> {
@@ -163,6 +166,13 @@ impl<OUT : Message + Send> OutgoingMessage<OUT> {
 /// Message received by client
 #[derive(Debug, Clone)]
 pub struct IncomingMessage<IN : Message + Send> {
-    client : ClientId,
-    message : IN
+    pub client : ClientId,
+    pub message : IN
+}
+
+impl<IN : Message + Send> IncomingMessage<IN> {
+    /// Create a new server incoming message
+    pub fn new(client : ClientId, message : IN) -> IncomingMessage<IN> {
+        IncomingMessage{ client, message }
+    }
 }

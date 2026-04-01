@@ -29,6 +29,9 @@ mod tnew;
 /// Tests for Server::start()
 mod tstart;
 
+/// Tests for Server::set_pool_rate()
+mod tpoolrate;
+
 /// Tests for Server::clients()
 mod tclients;
 

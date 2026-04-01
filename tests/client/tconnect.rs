@@ -22,23 +22,48 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use std::net::{Ipv4Addr, SocketAddr};
+
+use baphonet::client::{Client, ErrorClient};
+
+use crate::shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket, message::{ClientToServerMessage, ServerToClientMessage}};
+
 
 #[test] 
 fn client_connect_ok() {
-    todo!()
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
+
+    match client.connect(create_test_socket(port)){
+        Ok(_) => {},
+        Err(_) => panic!("Shouldn't be err()!"),
+    }
 }
 
 #[test]
 fn client_connect_err_not_found() {
-    todo!()
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
+
+    let socket = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), port);
+    match client.connect(socket){
+        Ok(_) =>  panic!("Shouldn't be Ok()!"),
+        Err(err) => assert_eq!(err, ErrorClient::ServerNotFound) ,
+    }
 }
 
 #[test]
 fn client_connect_err_already_connected() {
-    todo!()
-}
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
 
-#[test]
-fn client_connect_err_connection_refused() {
-    todo!()
+    let socket = create_test_socket(port);
+    match client.connect(socket.clone()){
+        Ok(_) => {},
+        Err(_) => panic!("Shouldn't be err()!"),
+    }
+     match client.connect(socket.clone()){
+        Ok(_) => panic!("Shouldn't be Ok()!"),
+        Err(err) => assert_eq!(err, ErrorClient::ClientAlreadyConnected),
+    }
 }

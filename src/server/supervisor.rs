@@ -23,12 +23,12 @@ SOFTWARE.
 */
 
 
-use std::{net::{SocketAddr, TcpListener}, sync::{Arc, Mutex}, thread::{self, JoinHandle}, time::{Duration, Instant}};
+use std::{net::{SocketAddr, TcpListener}, sync::{Arc, Mutex, mpsc::RecvTimeoutError}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 
-use crate::{Message, server::{ClientId, Error, channel::{SupervisorChannel, WorkerChannel}, client::Clients, message::{ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate, SupervisorWorkerMessage, WorkerMessage}, status::SupervisorStatus, task::{TaskStatus, Tasks}, worker::{Worker, WorkerId}}};
+use crate::{Message, server::{ClientId, ErrorServer, ErrorUpdate, channel::{SupervisorChannel, WorkerChannel}, client::Clients, message::{ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate, SupervisorWorkerMessage, WorkerMessage}, status::SupervisorStatus, task::{TaskStatus, Tasks}, worker::{Worker, WorkerId}}};
 
-/// Maximum duration per worker while trying to join thread.
-const MS_JOIN_WAIT_DURATION_PER_WORKER : u64 = 100;
+/// Milliseconds of wait time per worker.
+const MS_JOIN_WAIT_DURATION_PER_WORKER : u64 = 10;
 
 /// Supervisor of worker threads
 pub(crate) struct Supervisor<IN : Message + Send + 'static, OUT : Message + Send + 'static> {
@@ -53,11 +53,17 @@ pub(crate) struct Supervisor<IN : Message + Send + 'static, OUT : Message + Send
 
     /// Worker thread handles
     workers : Vec<JoinHandle<()>>,
+
+    /// Supervisor last pool time
+    last_pool : Instant,
+
+    /// Supervisor pool rate duration in milliseconds
+    pool_rate_duration : Duration,
 }
 
 impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
     /// Create a new instance of [`Supervisor`] from parameters.
-    pub fn new(socket : SocketAddr, maximum_client : usize, worker_count : usize, clients : Clients, channels : SupervisorChannel<IN, OUT>) -> Result<Supervisor<IN, OUT>, Error> {
+    pub fn new(socket : SocketAddr, maximum_client : usize, worker_count : usize, pool_rate : u64, clients : Clients, channels : SupervisorChannel<IN, OUT>) -> Result<Supervisor<IN, OUT>, ErrorServer> {
 
         // Try to create listener
         match Self::create_tcp_listener(socket) {
@@ -65,6 +71,8 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
                 let listener = Arc::new(Mutex::new(listener));
                 
                 Ok(Supervisor { listener, worker_count, clients, channels, workers :  Vec::<JoinHandle<()>>::with_capacity(worker_count),
+                    last_pool : Instant::now(),
+                    pool_rate_duration : Duration::from_millis(1000 / pool_rate),
                     status: SupervisorStatus::Paused,
                     tasks: Tasks::new(maximum_client) })
 
@@ -87,12 +95,22 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
         'supervisor:
         loop {
             match self.status {
-                SupervisorStatus::Active | SupervisorStatus::Paused => match self.channels.rcv_supervisor.recv() {
-                    Ok(message) => match message {
-                        SupervisorMessage::FromServer(message) => self.handle_server_message(message),
-                        SupervisorMessage::FromWorker(message) => self.handle_worker_message(message),
-                    },
-                    Err(_) =>  self.status = SupervisorStatus::Ending, // Channel lost, kill supervisor
+                SupervisorStatus::Active | SupervisorStatus::Paused => {
+                        if self.last_pool.elapsed() > self.pool_rate_duration {
+                            self.handle_server_tasks();    // Do supervisor tasks
+                        }
+                        match self.channels.rcv_supervisor.recv_timeout(self.pool_rate_duration) {
+                        Ok(message) => match message {
+                            SupervisorMessage::FromServer(message) => self.handle_server_message(message),
+                            SupervisorMessage::FromWorker(message) => self.handle_worker_message(message),
+                        },
+                        Err(err) =>  {
+                            match err {
+                                RecvTimeoutError::Timeout => self.handle_server_tasks(),    // Do supervisor tasks
+                                RecvTimeoutError::Disconnected =>  self.status = SupervisorStatus::Ending, // Channel lost, kill supervisor
+                            }    
+                        }, 
+                    }
                 },
                 SupervisorStatus::Ending => break 'supervisor,
             }
@@ -108,17 +126,17 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
     fn handle_server_message(&mut self, message : SupervisorServerMessage) {
 
         match message {
-            SupervisorServerMessage::Execute => self.handle_server_message_execute(),
             SupervisorServerMessage::Pause => self.status = SupervisorStatus::Paused,
             SupervisorServerMessage::Resume => self.handle_server_message_resume(),
             SupervisorServerMessage::Stop => self.status = SupervisorStatus::Ending,
+            SupervisorServerMessage::PoolRate(pool_rate) => self.handle_server_message_pool_rate(pool_rate),
         }
 
     }
 
     /// Handle the execute server message
     #[inline]
-    fn handle_server_message_execute(&mut self) {
+    fn handle_server_tasks(&mut self) {
 
         // Incoming connection task
         match self.tasks.incoming {
@@ -139,6 +157,20 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
                 None => {},
             }
         }
+
+        // Register timestamp
+        self.last_pool = Instant::now();
+
+    }
+
+    /// Handle the new pool rate server message
+    #[inline]
+    fn handle_server_message_pool_rate(&mut self, pool_rate : u64) {
+
+        self.pool_rate_duration = Duration::from_millis(1000 / pool_rate);
+
+        // Notify server of poolrate change
+        self.send_update_to_server(SupervisorUpdate::PoolRate(pool_rate));
 
     }
 
@@ -167,8 +199,8 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
             SupervisorWorkerMessage::IncomingJobDone => self.tasks.incoming = TaskStatus::Ready,
             SupervisorWorkerMessage::ReceiveJobDone(client_id) => self.handle_worker_message_receive_done(client_id),
             SupervisorWorkerMessage::Disconnected(client_id) => self.handle_worker_message_disconnected(client_id),
-            SupervisorWorkerMessage::ConnectionLost(client_id) => self.handle_worker_message_connection_lost(client_id),
             SupervisorWorkerMessage::Finished(worker_id) => self.handle_worker_message_finished(worker_id),
+            SupervisorWorkerMessage::Error(error) => self.handle_worker_message_error(error),
         }
     }
 
@@ -199,17 +231,19 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
 
     }
 
-    /// Handle worker connection lost message
+    /// Handle worker client not found
     #[inline]
-    fn handle_worker_message_connection_lost(&mut self, client_id : ClientId) {
+    fn handle_worker_message_error(&mut self, error : ErrorUpdate) {
 
-        self.remove_client_from_lists(client_id);
+        match &error {
+            ErrorUpdate::ConnectionLost(client_id) => self.remove_client_from_lists(*client_id),
+            _ => {}
+        }
 
-        // Notify server
-        self.send_update_to_server(SupervisorUpdate::ClientConnectionLost(client_id));
+        // Notify server of error
+        self.send_update_to_server(SupervisorUpdate::Error(error));
 
     }
-
     
 
     /// Handle worker message that it is finished
@@ -294,20 +328,19 @@ impl <IN : Message + Send, OUT : Message + Send> Supervisor<IN, OUT> {
 
     /// Create the TcpListener from [`SocketAddr`].
     #[inline]
-    fn create_tcp_listener(socket : SocketAddr) -> Result<TcpListener, Error> {
+    fn create_tcp_listener(socket : SocketAddr) -> Result<TcpListener, ErrorServer> {
 
         match TcpListener::bind(socket){
             Ok(listener) => {
-                match listener.set_nonblocking(true) {
-                    Ok(_) => Ok(listener),
-                    Err(_) => Err(Error::SetNonblockingFailed),
-                }
+                // This should crash instead of having a blocking listener
+                listener.set_nonblocking(true).unwrap();
+                Ok(listener)
             }, 
             Err(err) => {
                 match err.kind() {
-                    std::io::ErrorKind::AddrInUse => Err(Error::SocketAddressAlreadyUsed),
-                    std::io::ErrorKind::InvalidInput => Err(Error::SocketInvalid),
-                    _ => Err(Error::UnhandledIOError(err.kind())),
+                    std::io::ErrorKind::AddrInUse => Err(ErrorServer::SocketAddressAlreadyUsed),
+                    std::io::ErrorKind::InvalidInput => Err(ErrorServer::SocketInvalid),
+                    _ => Err(ErrorServer::UnhandledIOError(err.kind())),
                 }
                 
             },

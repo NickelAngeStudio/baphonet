@@ -22,9 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use crate::server::{ClientId, client::Client};
 
+
+/// Error that happens to the server
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Error {
+pub enum ErrorServer {
 
     /// Server maximum client allowed is below [`SERVER_MINIMUM_CLIENT_CAP`](super::SERVER_MINIMUM_CLIENT_CAP).
     MaximumClientBelowMinimum,
@@ -47,10 +50,38 @@ pub enum Error {
     /// Provided socket address is already used by another process
     SocketAddressAlreadyUsed,
 
-    /// Listener or stream could not be set to non-blocking
-    SetNonblockingFailed,
+    /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
+    PoolRateBelowMinimum,
+
+    /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
+    PoolRateAboveMaximum,
 
      /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),
+
+}
+
+/// Error given via ServerMessage::update()
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ErrorUpdate {
+    /// Client connection lost
+    ConnectionLost(ClientId),
+
+    /// Client not found
+    ClientNotFound(ClientId),
+
+    /// Outgoing message is bigger than maximum
+    OutgoingMessageTooLarge,
+
+    /// Outgoing message serialize ended in error
+    OutgoingMessageSerializeError,
+
+    /// Incoming message is too large.
+    IncomingMessageTooLarge(ClientId),
+
+    /// Incoming message deserialize ended in error
+    IncomingMessageError(ClientId),
+
+
 
 }

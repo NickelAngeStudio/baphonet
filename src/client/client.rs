@@ -24,7 +24,7 @@ SOFTWARE.
 
 use std::{net::SocketAddr, thread::JoinHandle};
 
-use crate::{Message, client::{Error, channel::{ClientChannel, create_client_worker_channels}, status::ClientStatus, worker::{self, Worker}}};
+use crate::{Message, client::{ErrorClient, channel::{ClientChannel, create_client_worker_channels}, status::ClientStatus, worker::{self, Worker}}};
 
 /// Status of a task
 pub(crate) enum TaskStatus {
@@ -72,7 +72,7 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
     ///     - Err([`Error::ServerNotFound`]) if socket address is incorrect or server is down.
     ///     - Err([`Error::ClientAlreadyConnected`]) if client is already connected.
     ///     - Err([`Error::ConnectionRefused`]) if server refused client connection.
-    pub fn connect(&mut self, addr : SocketAddr) -> Result<(), Error> {
+    pub fn connect(&mut self, addr : SocketAddr) -> Result<(), ErrorClient> {
         
         match self.status {
             ClientStatus::Disconnected => {
@@ -90,12 +90,12 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static>  Client<IN, 
                     Err(err) => Err(err),
                 }
             },
-            _ => Err(Error::ClientAlreadyConnected)
+            _ => Err(ErrorClient::ClientAlreadyConnected)
         }
 
     }
 
-    pub fn send(&mut self, message : OUT) -> Result<(), Error>{
+    pub fn send(&mut self, message : OUT) -> Result<(), ErrorClient>{
         todo!()
     }
 

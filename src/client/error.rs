@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#[derive(Debug)]
-pub enum Error {
+/// Possible [`Client`](super::Client) error
+#[derive(Debug, PartialEq)]
+pub enum ErrorClient {
 
     /// Cant connect to given address. Server might be down.
     ServerNotFound,

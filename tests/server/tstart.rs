@@ -24,7 +24,7 @@ SOFTWARE.
 
 use std::net::{IpAddr, SocketAddr};
 
-use baphonet::server::{Error, Server, ServerStatus};
+use baphonet::server::{ErrorServer, Server, ServerStatus};
 
 use crate::shared::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, message::{ClientToServerMessage, ServerToClientMessage}};
 
@@ -50,7 +50,7 @@ fn server_start_err_active() {
     server.start(socket).unwrap();
     match server.start(socket) {
         Ok(_) => panic!("start() shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, Error::ServerAlreadyActive),
+        Err(err) => assert_eq!(err, ErrorServer::ServerAlreadyActive),
     }
 
 }
@@ -65,6 +65,6 @@ fn server_start_err_address_already_used() {
     server1.start(socket).unwrap();
     match server2.start(socket) {
         Ok(_) => panic!("start() shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, Error::SocketAddressAlreadyUsed),
+        Err(err) => assert_eq!(err, ErrorServer::SocketAddressAlreadyUsed),
     }
 }

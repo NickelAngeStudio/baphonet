@@ -22,12 +22,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::{TcpListener, TcpStream}, sync::{Arc, Mutex}};
+use std::{io::{Read, Write}, net::{Shutdown, TcpListener, TcpStream}, sync::{Arc, Mutex, MutexGuard}};
 
-use crate::{MAXIMUM_MESSAGE_SIZE, Message, server::{ClientId, channel::WorkerChannel, client::{Client, Clients}, message::{IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorWorkerMessage, WorkerMessage}, status::WorkerStatus}};
+use crate::{MAXIMUM_MESSAGE_SIZE, Message, client, server::{ClientId, ErrorUpdate, SIZE_OF_CLIENT_ID, channel::WorkerChannel, client::{Client, Clients}, message::{IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorWorkerMessage, WorkerMessage}, status::WorkerStatus}};
 
 
 pub(crate) type WorkerId = usize;
+
+/// Shortcut macro to fetch a client from id.
+macro_rules! get_client_from_id {
+    ($self:expr, $client:ident, $clients:expr, $client_id:expr, $($arg:tt)*) => {
+
+        if ($client_id as usize) < $clients.len() {
+            match $clients[$client_id as usize].lock(){
+                Ok(mut $client) => match $client.as_mut() {
+                    Some($client) => {
+                        $($arg)*
+                    },
+                    None => $self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::ClientNotFound($client_id))),    // Client not found
+                },
+                Err(_) => {
+                    // TODO: Handle lock error #15
+                    todo!()
+                },
+            }
+        } else {
+            $self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::ClientNotFound($client_id)))
+        }
+
+    };
+
+
+}
 
 /// Worker that execute tasks.
 pub(crate) struct Worker<IN : Message + Send,OUT : Message + Send> {
@@ -56,6 +82,7 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
 
     /// Execute the worker routine
     pub fn execute(&mut self) {
+
         // Buffer to send / receive message
         let mut buffer = Vec::<u8>::with_capacity(MAXIMUM_MESSAGE_SIZE);
         buffer.resize(MAXIMUM_MESSAGE_SIZE, 0);
@@ -63,7 +90,7 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
         'worker:
         loop {
             match self.status {
-                WorkerStatus::Active => self.handle_worker_routine(),
+                WorkerStatus::Active => self.handle_worker_routine(&mut buffer),
                 WorkerStatus::Ended => break 'worker,
             }
         }
@@ -74,7 +101,7 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
 
     /// Handle worker active routine 
     #[inline]
-    fn handle_worker_routine(&mut self) {
+    fn handle_worker_routine(&mut self, buffer : &mut Vec<u8>) {
 
         // Get worker message while trying to release mutex ASAP
         let worker_message = {
@@ -95,9 +122,9 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
 
         match worker_message {
             WorkerMessage::Incoming => self.handle_worker_incoming(),
-            WorkerMessage::Receive(client_id) => self.handle_worker_receive(client_id),
-            WorkerMessage::Send(message) => self.handle_worker_send(message),
-            WorkerMessage::Clear(client_id) => self.handle_worker_clear(client_id),
+            WorkerMessage::Receive(client_id) => self.handle_worker_receive(client_id, buffer),
+            WorkerMessage::Send(message) => self.handle_worker_send(buffer, message),
+            WorkerMessage::Clear(client_id) => self.handle_worker_clear(client_id, buffer),
             WorkerMessage::Disconnect(client_id) => self.handle_worker_disconnect(client_id),
             WorkerMessage::End => self.status = WorkerStatus::Ended,
         }
@@ -127,7 +154,7 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
             Ok(listener) => {
                 for stream in listener.incoming() {
                     match stream {
-                        Ok(stream) => {
+                        Ok(stream) => { // Immediately close connection
                             match stream.shutdown(std::net::Shutdown::Both) {
                                 Ok(_) => {},
                                 Err(_) => {},
@@ -202,25 +229,192 @@ impl<IN : Message + Send,OUT : Message + Send> Worker<IN, OUT> {
 
     /// Handle receiving client message
     #[inline]
-    fn handle_worker_receive(&mut self, client_id : ClientId) {
+    fn handle_worker_receive(&mut self, client_id : ClientId,  buffer : &mut Vec<u8>) {
+
+        let clients = self.clients.clone();
+        get_client_from_id!{ self, client, clients, client_id, 
+            'receive:
+            loop {
+                // Fetch message size if any
+                client.inc_msg_size = self.get_incoming_message_size(client, client_id, buffer);
+
+                // Fetch message if any
+                match client.inc_msg_size {
+                    Some(size) => match self.get_incoming_message(client, client_id, &mut buffer[..size]) {
+                        Some(incoming) => self.send_incoming_message_to_server(incoming),
+                        None => break 'receive,
+                    }
+                    None => break 'receive,
+                }
+            }
+        }
 
     }
+
+    /// Get incoming message size.
+    #[inline]
+    fn get_incoming_message_size(&mut self, client : &mut Client, client_id : ClientId, buffer : &mut [u8]) -> Option<usize> {
+
+        match client.inc_msg_size {
+            Some(size) => Some(size),   // If size is already read, keep it
+            None => {
+                match client.stream.read_exact(&mut buffer[..SIZE_OF_CLIENT_ID]) {
+                    Ok(_) => {
+                        let size = u16::from_le_bytes(buffer[..SIZE_OF_CLIENT_ID].try_into().unwrap()) as usize;
+
+                        if size <= MAXIMUM_MESSAGE_SIZE {
+                            Some(size)
+                        } else {
+                            // Clear stream.
+                            Self::clear_stream(&mut client.stream, buffer);
+                            // Notify supervisor
+                            self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::IncomingMessageTooLarge(client_id)));
+                            None
+                        }
+                    },
+                    Err(err) => {
+                        match err.kind() {
+                            std::io::ErrorKind::WouldBlock => None,
+                            _ => {  // Client connection lost
+                                self.handle_connection_lost(client, client_id);
+                                None
+                            },
+                        } 
+                    },
+                }
+            },
+        }
+        
+        
+
+    }
+
+    /// Get incoming message
+    #[inline]
+    fn get_incoming_message(&mut self, client : &mut Client, client_id : ClientId, buffer : &mut [u8]) -> Option<IncomingMessage<IN>> {
+
+        match client.stream.read_exact(buffer) {
+        Ok(_) => match IN::deserialize(buffer) {
+            Ok(message) => Some(IncomingMessage::new(client_id, message)),
+            Err(_) => {
+                Self::clear_stream(&mut client.stream, buffer); // Clear stream
+                self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::IncomingMessageError(client_id)));
+                None
+
+            },
+        },
+        Err(err) => {
+            match err.kind() {
+                std::io::ErrorKind::WouldBlock => None,
+                _ => { // Client connection lost
+                    self.handle_connection_lost(client, client_id);
+                    None
+                },
+            } 
+        },
+    } 
+    
+    }
+
+
+
 
     /// Handle sending message to clients
     #[inline]
-    fn handle_worker_send(&mut self, message : OutgoingMessage<OUT>) {
+    fn handle_worker_send(&mut self,  buffer : &mut Vec<u8>, message : OutgoingMessage<OUT>) {
+
+        match message.message.serialize(buffer) {
+            Ok(size) => {
+                if size > MAXIMUM_MESSAGE_SIZE {
+                    self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::OutgoingMessageTooLarge));
+                } else {
+                    let clients = self.clients.clone();
+
+                    // Get bytes of message size
+                    let size_bytes = (size as u16).to_le_bytes();
+
+                    // For each destination
+                    for client_id in message.destinations {
+                        get_client_from_id!{ self, client, clients, client_id, 
+                            // Send size
+                            match client.stream.write_all(&size_bytes) {
+                                Ok(_) => {
+                                    // Send message
+                                     match client.stream.write_all(&buffer[..size]) {
+                                        Ok(_) => {
+                                            // Send message
+                                        },
+                                        Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
+                                    }
+                                },
+                                Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
+                            }
+                        }
+                    }
+                }
+            },
+            Err(_) => self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::OutgoingMessageSerializeError)),
+        }
 
     }
 
+
     /// Handle clearing client stream buffer
     #[inline]
-    fn handle_worker_clear(&mut self, client_id : ClientId) {
+    fn handle_worker_clear(&mut self, client_id : ClientId,  buffer : &mut Vec<u8>) {
+
+        let clients = self.clients.clone();
+        get_client_from_id!{ self, client, clients, client_id, Self::clear_stream(&mut client.stream, buffer) }
+
+    }
+
+    /// Clear a TcpStream with a buffer.
+    #[inline]
+    fn clear_stream(stream : &mut TcpStream, buffer : &mut [u8]) {
+
+        // Clear read buffer
+        'clear:
+        loop {
+            match stream.read(buffer){
+                Ok(size) => {
+                    if size == 0 {  // Nothing else to read
+                        break 'clear;
+                    }
+                },
+                Err(_) => break 'clear,
+            }
+        }
+
+    }
+
+    /// Handle disconnecting client
+    #[inline]
+    fn handle_connection_lost(&mut self, client : &mut Client, client_id : ClientId) {
+        
+        match client.stream.shutdown(Shutdown::Both){
+            Ok(_) => {},
+            Err(_) => {},
+        }
+
+        // Notify supervisor of connection lost
+        self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::ConnectionLost(client_id)));
+
 
     }
 
     /// Handle disconnecting client
     #[inline]
     fn handle_worker_disconnect(&mut self, client_id : ClientId) {
+        
+        let clients = self.clients.clone();
+        get_client_from_id!{ self, client, clients, client_id, 
+            match client.stream.shutdown(Shutdown::Both){
+                Ok(_) => {},
+                Err(_) => {},
+            }
+            self.send_message_to_supervisor(SupervisorWorkerMessage::Disconnected(client_id));
+        
+        }
 
     }
 

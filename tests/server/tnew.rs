@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use baphonet::server::{Error, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, Server, ServerStatus};
+use baphonet::server::{ErrorServer, SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP, Server, ServerStatus};
 
 use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
@@ -65,7 +65,7 @@ fn server_new_ok_maximum_worker() {
 fn server_new_err_client_below_minimum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP - 1, SERVER_MINIMUM_WORKER_CAP) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, Error::MaximumClientBelowMinimum),
+        Err(err) =>assert_eq!(err, ErrorServer::MaximumClientBelowMinimum),
     }
 }
 
@@ -73,7 +73,7 @@ fn server_new_err_client_below_minimum() {
 fn server_new_err_client_above_maximum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP + 1, SERVER_MINIMUM_WORKER_CAP) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, Error::MaximumClientAboveMaximum),
+        Err(err) =>assert_eq!(err, ErrorServer::MaximumClientAboveMaximum),
     }
 }
 
@@ -81,7 +81,7 @@ fn server_new_err_client_above_maximum() {
 fn server_new_err_worker_below_minimum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP - 1) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, Error::WorkerCountBelowMinimum),
+        Err(err) =>assert_eq!(err, ErrorServer::WorkerCountBelowMinimum),
     }
 }
 
@@ -89,7 +89,7 @@ fn server_new_err_worker_below_minimum() {
 fn server_new_err_worker_above_maximum() {
     match Server::<ClientToServerMessage, ServerToClientMessage>::new(SERVER_MAXIMUM_CLIENT_CAP, SERVER_MAXIMUM_CLIENT_CAP + 1) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) =>assert_eq!(err, Error::WorkerCountAboveMaximum),
+        Err(err) =>assert_eq!(err, ErrorServer::WorkerCountAboveMaximum),
     }
 }
 

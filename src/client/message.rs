@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use crate::{Message, client::{Error, status::WorkerStatus}};
+use crate::{Message, client::{ErrorClient, status::WorkerStatus}};
 
 /// Message sent to client from worker
 pub enum ClientMessage<IN : Message + Send + 'static> {
@@ -31,7 +31,7 @@ pub enum ClientMessage<IN : Message + Send + 'static> {
     Incoming(IN),
 
     /// An error occurred from the worker thread
-    Error(Error),
+    Error(ErrorClient),
 
     /// Worker status changed
     StatusChanged(WorkerStatus),

@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use baphonet::server::message::{ServerMessage, SupervisorUpdate};
-use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_port, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
+use baphonet::{client::Client, server::message::{ServerMessage, SupervisorUpdate}};
+use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_clients, create_server_and_port, create_test_socket, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
 
 #[test]
 fn server_message_none() {
@@ -64,8 +64,29 @@ fn server_message_update_active() {
 }
 
 #[test]
-fn server_message_update_client_connected() {
-    todo!()
+fn server_message_update_client_connected_one() {
+    
+    let (mut server, _clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all, CLIENT_SIZE.one);
+    
+    timeout_loop!{
+        match server.message() {
+            Some(msg) => match msg {
+                ServerMessage::Update(update) => {
+                    match update {
+                        SupervisorUpdate::ClientConnected(client_id) => {
+                            assert_eq!(client_id, 0);
+                            break;   
+                        },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+
 }
 
 #[test]
@@ -74,9 +95,30 @@ fn server_message_update_client_disconnected() {
 }
 
 #[test]
-fn server_message_update_client_connection_lost() {
+fn server_message_update_error_connection_lost() {
     todo!()
 }
+
+#[test]
+fn server_message_update_error_client_not_found() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_error_outgoing_too_large() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_error_outgoing_serialize_error() {
+    todo!()
+}
+
+#[test]
+fn server_message_update_error_incoming_deserialize_error() {
+    todo!()
+}
+
 
 #[test]
 fn server_message_update_ended() {

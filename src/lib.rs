@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+
 /// Maximum message size is 65535 bytes (64ko).
 /// 
 /// Message bigger than that should be cut in smaller message.

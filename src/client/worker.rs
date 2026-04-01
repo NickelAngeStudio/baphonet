@@ -24,7 +24,7 @@ SOFTWARE.
 
 use std::net::{SocketAddr, TcpStream};
 
-use crate::{MAXIMUM_MESSAGE_SIZE, Message, client::{Error, channel::WorkerChannel, message::{ClientMessage, WorkerMessage}, status::WorkerStatus}};
+use crate::{MAXIMUM_MESSAGE_SIZE, Message, client::{ErrorClient, channel::WorkerChannel, message::{ClientMessage, WorkerMessage}, status::WorkerStatus}};
 
 
 /// Client Worker thread.
@@ -48,7 +48,7 @@ pub struct Worker<IN : Message + Send + 'static,OUT : Message + Send + 'static> 
 impl <IN : Message + Send + 'static,OUT : Message + Send + 'static> Worker<IN, OUT> {
 
     /// Create new worker from socket address and channels.
-    pub fn new(addr : SocketAddr, channels : WorkerChannel<IN, OUT>) -> Result<Worker<IN, OUT>, Error> {
+    pub fn new(addr : SocketAddr, channels : WorkerChannel<IN, OUT>) -> Result<Worker<IN, OUT>, ErrorClient> {
 
         match TcpStream::connect(addr) {
             Ok(stream) => {
@@ -57,29 +57,29 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static> Worker<IN, O
                         Ok(_) => {
                             Ok(Worker{ stream, channels, status: WorkerStatus::Starting, inc_size: None })
                         },
-                        Err(err) => Err(Error::UnhandledIOError(err.kind())),
+                        Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
                     },
-                    Err(err) => Err(Error::UnhandledIOError(err.kind())),
+                    Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
                 }
             },
             Err(err) => {
                 match err.kind() {
                     std::io::ErrorKind::InvalidInput |
-                    std::io::ErrorKind::InvalidData => Err(Error::InvalidSocket),
+                    std::io::ErrorKind::InvalidData => Err(ErrorClient::InvalidSocket),
 
                     std::io::ErrorKind::HostUnreachable |
                     std::io::ErrorKind::NetworkUnreachable |
                     std::io::ErrorKind::NotFound |
                     std::io::ErrorKind::AddrNotAvailable |
-                    std::io::ErrorKind::NetworkDown => Err(Error::ServerNotFound),
+                    std::io::ErrorKind::NetworkDown => Err(ErrorClient::ServerNotFound),
 
                     std::io::ErrorKind::PermissionDenied |
                     std::io::ErrorKind::ConnectionRefused |
                     std::io::ErrorKind::ConnectionReset |
                     std::io::ErrorKind::ConnectionAborted |
-                    std::io::ErrorKind::NotConnected => Err(Error::ConnectionRefused),                    
+                    std::io::ErrorKind::NotConnected => Err(ErrorClient::ConnectionRefused),                    
                     
-                    _ => Err(Error::UnhandledIOError(err.kind())),
+                    _ => Err(ErrorClient::UnhandledIOError(err.kind())),
                 }
             },
         }
@@ -116,7 +116,7 @@ impl <IN : Message + Send + 'static,OUT : Message + Send + 'static> Worker<IN, O
         // Shutdown stream
         match self.stream.shutdown(std::net::Shutdown::Both) {
             Ok(_) => {},
-            Err(err) => self.message_client(ClientMessage::Error(Error::UnhandledIOError(err.kind()))),
+            Err(err) => self.message_client(ClientMessage::Error(ErrorClient::UnhandledIOError(err.kind()))),
         }
 
 

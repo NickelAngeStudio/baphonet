@@ -36,4 +36,5 @@ pub mod message;
 
 pub(crate) mod worker;
 
-pub use error::Error as Error;
+pub use error::ErrorClient as ErrorClient;
+pub use client::Client as Client;

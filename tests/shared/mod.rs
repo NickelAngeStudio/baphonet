@@ -25,6 +25,7 @@ SOFTWARE.
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
+use baphonet::client::Client;
 use baphonet::server::Server;
 use baphonet::Message;
 
@@ -72,6 +73,32 @@ macro_rules! timeout_loop {
 }
 
 
+/// Create a test socket from a port
+pub fn create_test_socket(port : u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::V4(TEST_IPV4), port)
+}
+
+/// Will create and start a server while finding a free port
+pub fn create_server_and_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(max_client : usize, worker_count : usize, client_count : usize) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
+
+    let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
+    let mut port : u16 = TEST_TCP_PORT;
+    
+
+    timeout_loop! {
+        let socket = create_test_socket(port);
+
+        match server.start(socket) {
+            Ok(_) => break,
+            Err(_) => port += 1,
+        }
+    }
+
+    let clients = create_connect_clients(client_count, port);
+
+    (server, clients)
+}
+
 /// Will create and start a server while finding a free port
 pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Send + 'static>(max_client : usize, worker_count : usize) -> (Server<IN, OUT>, u16) {
 
@@ -80,7 +107,7 @@ pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Sen
     
 
     timeout_loop! {
-        let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), port);
+        let socket = create_test_socket(port);
 
         match server.start(socket) {
             Ok(_) => break,
@@ -89,4 +116,18 @@ pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Sen
     }
 
     (server, port)
+}
+
+
+/// Create and connect an array of clients
+pub fn create_connect_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(client_count : usize, port : u16) -> Vec<Client<IN, OUT>>{
+    let mut clients = Vec::<Client<IN, OUT>>::new();
+
+    for _ in 0..client_count {
+         let mut client = Client::<IN, OUT>::new();
+         client.connect(create_test_socket(port)).unwrap();
+         clients.push(client);
+    }
+
+    clients
 }

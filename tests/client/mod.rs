@@ -27,3 +27,12 @@ mod tconnect;
 
 /// Tests for Client pool rate
 mod tpoolrate;
+
+/// Tests for Client::close()
+mod tclose;
+
+/// Tests for Client::message()
+mod tmessage;
+
+/// Tests for Client::send()
+mod tsend;

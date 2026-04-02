@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,43 +22,79 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use baphonet::server::{ClientId, message::{ServerMessage, SupervisorUpdate}};
-use crate::{shared::{CLIENT_SIZE, WORKER_COUNT, accumulate, create_server_and_clients, create_server_and_port, message::{ClientToServerMessage, ServerToClientMessage}}, timeout_loop};
+use std::time::{Duration, Instant};
+
+use crate::{
+    shared::{
+        CLIENT_SIZE, WORKER_COUNT, accumulate, close_clients, compare_client_server_message,
+        create_server_and_clients, create_server_and_port,
+        message::{ClientToServerMessage, ServerToClientMessage},
+    },
+    timeout_loop,
+};
+use baphonet::server::{
+    ClientId,
+    message::{ServerMessage, SupervisorUpdate},
+};
+
+/// Message sent per client
+const MESSAGE_PER_CLIENT: usize = u8::MAX as usize;
 
 #[test]
 fn server_message_none() {
-    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        WORKER_COUNT.all,
+    );
 
-    timeout_loop!{
+    timeout_loop! {
         match server.message() {
             Some(_) => {},
             None => break,
         }
     }
+}
 
+/// Returns true if all message are received.
+fn is_all_received(msg_rcv: &Vec<usize>) -> bool {
+    for rcv in msg_rcv {
+        if *rcv != MESSAGE_PER_CLIENT {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[test]
 fn server_message_some_incoming_one_client() {
-    todo!()
+    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.one);
+    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.one);
+    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.one);
 }
 
 #[test]
 fn server_message_some_incoming_some_client() {
-    todo!()
+    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.some);
+    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.some);
+    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.some);
 }
 
 #[test]
 fn server_message_some_incoming_all_client() {
-    todo!()
+    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.all);
+    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.all);
+    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.all);
 }
 
 #[test]
 fn server_message_update_active() {
-    
-    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        WORKER_COUNT.all,
+    );
 
-    timeout_loop!{
+    timeout_loop! {
         match server.message() {
             Some(message) => match message {
                 ServerMessage::Incoming(_) => {},
@@ -70,52 +106,48 @@ fn server_message_update_active() {
             None => {},
         }
     }
-
 }
 
 #[test]
 fn server_message_update_client_connected_one() {
-    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.one);
-    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.one);
-    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.one);
+    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.one);
+    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.one);
+    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.one);
 }
-
 
 #[test]
 fn server_message_update_client_connected_some() {
-    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.some);
-    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.some);
-    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.some);
+    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.some);
+    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.some);
+    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.some);
 }
 
 #[test]
 fn server_message_update_client_connected_all() {
-    server_message_update_client_connected(WORKER_COUNT.one,CLIENT_SIZE.all);
-    server_message_update_client_connected(WORKER_COUNT.some,CLIENT_SIZE.all);
-    server_message_update_client_connected(WORKER_COUNT.all,CLIENT_SIZE.all);
+    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.all);
+    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.all);
+    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.all);
 }
-
-
 
 #[test]
 fn server_message_update_client_disconnected_one() {
-    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.one);
-    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.one);
-    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.one);
+    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.one);
+    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.one);
+    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.one);
 }
 
 #[test]
 fn server_message_update_client_disconnected_some() {
-    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.some);
-    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.some);
-    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.some);
+    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.some);
+    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.some);
+    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.some);
 }
 
 #[test]
 fn server_message_update_client_disconnected_all() {
-    server_message_update_client_disconnected(WORKER_COUNT.one,CLIENT_SIZE.all);
-    server_message_update_client_disconnected(WORKER_COUNT.some,CLIENT_SIZE.all);
-    server_message_update_client_disconnected(WORKER_COUNT.all,CLIENT_SIZE.all);
+    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.all);
+    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.all);
+    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.all);
 }
 
 #[test]
@@ -123,12 +155,10 @@ fn server_message_update_pool_rate() {
     todo!()
 }
 
-
 #[test]
 fn server_message_update_full() {
     todo!()
 }
-
 
 #[test]
 fn server_message_update_error_connection_lost() {
@@ -155,19 +185,21 @@ fn server_message_update_error_incoming_deserialize_error() {
     todo!()
 }
 
-
 #[test]
 fn server_message_update_ended() {
     todo!()
 }
 
 /// Receive client connected update and add them up.
-fn server_message_update_client_connected(worker_count : usize, count : usize){
-    let (mut server, clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, worker_count, count);
-    
-    let total_client_id : usize = accumulate(clients.len());
-    let mut sum_client_id : usize = 0;
-    timeout_loop!{
+fn server_message_update_client_connected(worker_count: usize, count: usize) {
+    let (mut server, mut clients) = create_server_and_clients::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all, worker_count, count);
+
+    let total_client_id: usize = accumulate(clients.len());
+    let mut sum_client_id: usize = 0;
+    timeout_loop! {
         match server.message() {
             Some(msg) => match msg {
                 ServerMessage::Update(update) => {
@@ -175,7 +207,7 @@ fn server_message_update_client_connected(worker_count : usize, count : usize){
                         SupervisorUpdate::ClientConnected(client_id) => {
                             sum_client_id += client_id as usize;
                             if sum_client_id == total_client_id {
-                                break;   
+                                break;
                             }
                         },
                         _ => {},
@@ -187,23 +219,79 @@ fn server_message_update_client_connected(worker_count : usize, count : usize){
         }
     }
 
+    close_clients(&mut clients);
     server.stop().unwrap();
 }
 
+/// Receive incoming message from parameters
+fn server_message_some_incoming_client(worker_count: usize, client_count: usize) {
+    let (mut server, mut clients) = create_server_and_clients::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all, worker_count, client_count);
+
+    let mut msg_rcv = Vec::<usize>::new();
+    msg_rcv.resize(clients.len(), 0);
+
+    for _ in 0..MESSAGE_PER_CLIENT {
+        for client in &mut clients {
+            client.send(ClientToServerMessage::control()).unwrap()
+        }
+    }
+
+    let instant = Instant::now();
+    let control = ClientToServerMessage::control();
+    let timeout = Duration::from_millis(100 * clients.len() as u64);
+    timeout_loop! { timeout,
+        match server.message(){
+            Some(msg) => {
+                match msg {
+                    ServerMessage::Incoming(incoming_message) => {
+                        compare_client_server_message(&control, &incoming_message.message);
+                        msg_rcv[incoming_message.client as usize] += 1;
+                    },
+                    _ => {},
+                }
+            },
+            None => {},
+        }
+
+        if is_all_received(&msg_rcv){
+            break;
+        }
+
+    }
+
+    println!(
+        "server_message_some_incoming_client({},{}) {}ms elapsed",
+        worker_count,
+        client_count,
+        instant.elapsed().as_millis()
+    );
+
+    // Close clients
+    close_clients(&mut clients);
+
+    // Close server
+    server.stop().unwrap();
+}
 
 /// Receive client connected update and add them up.
-fn server_message_update_client_disconnected(worker_count : usize, count : usize){
-    let (mut server, clients) = create_server_and_clients::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, worker_count, count);
-    
-    let total_client_id : usize = accumulate(clients.len());
-    let mut sum_client_id : usize = 0;
+fn server_message_update_client_disconnected(worker_count: usize, count: usize) {
+    let (mut server, mut clients) = create_server_and_clients::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all, worker_count, count);
+
+    let total_client_id: usize = accumulate(clients.len());
+    let mut sum_client_id: usize = 0;
 
     // Close each connection
     for i in 0..clients.len() {
         server.close_connection(i as ClientId).unwrap();
     }
 
-    timeout_loop!{
+    timeout_loop! {
         match server.message() {
             Some(msg) => match msg {
                 ServerMessage::Update(update) => {
@@ -211,7 +299,7 @@ fn server_message_update_client_disconnected(worker_count : usize, count : usize
                         SupervisorUpdate::ClientDisconnected(client_id) => {
                             sum_client_id += client_id as usize;
                             if sum_client_id == total_client_id {
-                                break;   
+                                break;
                             }
                         },
                         _ => {},
@@ -223,6 +311,6 @@ fn server_message_update_client_disconnected(worker_count : usize, count : usize
         }
     }
 
+    close_clients(&mut clients);
     server.stop().unwrap();
 }
-

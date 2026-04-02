@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,10 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
 /// Possible client statuses
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ClientStatus {
-
     /// Client is currently disconnected.
     Disconnected,
 
@@ -37,13 +36,11 @@ pub enum ClientStatus {
 
     /// Client is currently disconnecting
     Disconnecting,
-
 }
 
 /// Possible statuses of the worker thread
 #[derive(Debug)]
 pub enum WorkerStatus {
-
     /// Worker thread is starting
     Starting,
 
@@ -52,5 +49,4 @@ pub enum WorkerStatus {
 
     /// Worker thread has ended
     Ended,
-
 }

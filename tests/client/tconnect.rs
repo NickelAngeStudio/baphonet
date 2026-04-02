@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -26,44 +26,58 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 use baphonet::client::{Client, ErrorClient};
 
-use crate::shared::{CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket, message::{ClientToServerMessage, ServerToClientMessage}};
+use crate::shared::{
+    CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket,
+    message::{ClientToServerMessage, ServerToClientMessage},
+};
 
-
-#[test] 
+#[test]
 fn client_connect_ok() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        WORKER_COUNT.all,
+    );
     let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
 
-    match client.connect(create_test_socket(port)){
-        Ok(_) => {},
+    match client.connect(create_test_socket(port)) {
+        Ok(_) => {}
         Err(_) => panic!("Shouldn't be err()!"),
     }
 }
 
 #[test]
 fn client_connect_err_not_found() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        WORKER_COUNT.all,
+    );
     let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
 
-    let socket = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), port);
-    match client.connect(socket){
-        Ok(_) =>  panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorClient::ServerNotFound) ,
+    let socket = SocketAddr::new(
+        std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
+        port,
+    );
+    match client.connect(socket) {
+        Ok(_) => panic!("Shouldn't be Ok()!"),
+        Err(err) => assert_eq!(err, ErrorClient::ServerNotFound),
     }
 }
 
 #[test]
 fn client_connect_err_already_connected() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all, WORKER_COUNT.all);
+    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        WORKER_COUNT.all,
+    );
     let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
 
     let socket = create_test_socket(port);
-    match client.connect(socket.clone()){
-        Ok(_) => {},
+    match client.connect(socket.clone()) {
+        Ok(_) => {}
         Err(_) => panic!("Shouldn't be err()!"),
     }
-     match client.connect(socket.clone()){
+    match client.connect(socket.clone()) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorClient::ClientAlreadyConnected),
+        Err(err) => assert_eq!(err, ErrorClient::AlreadyConnected),
     }
 }

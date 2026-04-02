@@ -22,14 +22,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-
 #[test]
-fn client_close_not_connected() {
+fn client_message_none(){
     todo!()
 }
 
 #[test]
-fn client_close_connected() {
+fn client_message_some_incoming(){
+    todo!()
+}
+
+#[test]
+fn client_message_some_error_connection_lost(){
+    todo!()
+}
+
+#[test]
+fn client_message_some_status_active(){
+    todo!()
+}
+
+#[test]
+fn client_message_some_status_ended(){
+    todo!()
+}
+
+
+#[test]
+fn client_message_some_pool_rate(){
     todo!()
 }

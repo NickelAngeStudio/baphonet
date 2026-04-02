@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -24,11 +24,9 @@ SOFTWARE.
 
 use crate::server::{ClientId, client::Client};
 
-
 /// Error that happens to the server
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ErrorServer {
-
     /// Server maximum client allowed is below [`SERVER_MINIMUM_CLIENT_CAP`](super::SERVER_MINIMUM_CLIENT_CAP).
     MaximumClientBelowMinimum,
 
@@ -61,16 +59,15 @@ pub enum ErrorServer {
 
     /// Error happened while trying to join supervisor thread
     ServerStopJoinError,
-    
-    /// Unexpected error happened during stop
-    ServerStopUnexpectedError,
+
+    /// Unexpected error happened
+    UnexpectedError,
 
     /// Server took too much time stopping.
     ServerStopTimeout,
 
-     /// An unhandled IO error occurred
+    /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),
-
 }
 
 /// Error given via ServerMessage::update()
@@ -93,7 +90,4 @@ pub enum ErrorUpdate {
 
     /// Incoming message deserialize ended in error
     IncomingMessageError(ClientId),
-
-
-
 }

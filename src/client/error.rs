@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -25,12 +25,11 @@ SOFTWARE.
 /// Possible [`Client`](super::Client) error
 #[derive(Debug, PartialEq)]
 pub enum ErrorClient {
-
     /// Cant connect to given address. Server might be down.
     ServerNotFound,
 
     /// Client is already connected.
-    ClientAlreadyConnected,
+    AlreadyConnected,
 
     /// Socket given is invalid
     InvalidSocket,
@@ -38,8 +37,14 @@ pub enum ErrorClient {
     /// Happens when server refused connection (ie server is full).
     ConnectionRefused,
 
+    /// Happens when client is disconnected.
+    Disconnected,
+
     /// Unhandled IO error
     UnhandledIOError(std::io::ErrorKind),
+
+    /// Unexpected error happened. 
+    UnexpectedError,
 
     /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
     PoolRateBelowMinimum,
@@ -48,19 +53,14 @@ pub enum ErrorClient {
     PoolRateAboveMaximum,
 
     /// Error happened while trying to join worker thread
-    ClientCloseJoinError,
-    
-    /// Unexpected error happened during close
-    ClientCloseUnexpectedError,
+    CloseJoinError,
 
     /// Client took too much time closing connection.
-    ClientCloseTimeout,
-    
+    CloseTimeout,
 }
 /// Possible [`Worker`](super::Worker) error
 #[derive(Debug, PartialEq)]
 pub enum ErrorWorker {
-
     /// Outgoing message serialize failed
     OutgoingSerializeError,
 

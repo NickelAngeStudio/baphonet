@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,14 +22,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use baphonet::client::{Client, ErrorClient};
 
+use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
 #[test]
-fn client_close_not_connected() {
+fn client_send_ok() {
     todo!()
 }
 
 #[test]
-fn client_close_connected() {
-    todo!()
+fn client_send_error_disconnected() {
+    let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
+
+    let msg = ClientToServerMessage::control();
+    match client.send(msg) {
+        Ok(_) => panic!("Shouldn't be Ok()!"),
+        Err(err) => assert_eq!(err, ErrorClient::Disconnected),
+    }
 }

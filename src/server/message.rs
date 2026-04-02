@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,25 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-use crate::{Message, server::{ClientId, error::ErrorUpdate, worker::WorkerId}};
+use crate::{
+    Message,
+    server::{ClientId, error::ErrorUpdate, worker::WorkerId},
+};
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
-pub enum ServerMessage<IN : Message + Send> {
-
+pub enum ServerMessage<IN: Message + Send> {
     /// Incoming message of a client
     Incoming(IncomingMessage<IN>),
 
     /// Server update sent from supervisor
     Update(SupervisorUpdate),
-
 }
 
 /// Possible server update
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorUpdate {
-
     /// Supervisor is now active
     Active,
 
@@ -61,25 +60,21 @@ pub enum SupervisorUpdate {
 
     /// Supervisor has ended
     Ended,
-
 }
 
 /// Message sent to and received by supervisor
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorMessage {
-
     /// Message sent from server
     FromServer(SupervisorServerMessage),
 
     /// Message sent from worker
     FromWorker(SupervisorWorkerMessage),
-
 }
 
 /// Supervisor message sent from server
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorServerMessage {
-
     /// Modify pool rate per second of the supervisor
     PoolRate(u64),
 
@@ -89,16 +84,13 @@ pub enum SupervisorServerMessage {
     /// Resume the supervisor
     Resume,
 
-    /// Stop the supervisor, ending threads    
-    Stop
-
-
+    /// Stop the supervisor, ending threads
+    Stop,
 }
 
 /// Supervisor message sent from worker
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorWorkerMessage {
-
     /// Client is now connected
     Connected(ClientId),
 
@@ -115,14 +107,12 @@ pub enum SupervisorWorkerMessage {
     Error(ErrorUpdate),
 
     /// Worker thread ended execution
-    Finished(WorkerId)
-
+    Finished(WorkerId),
 }
 
 /// Message sent to and received by worker
 #[derive(Debug, Clone)]
-pub enum WorkerMessage<OUT : Message + Send> {
-
+pub enum WorkerMessage<OUT: Message + Send> {
     /// Handle incoming connection to server
     Incoming,
 
@@ -144,35 +134,38 @@ pub enum WorkerMessage<OUT : Message + Send> {
 
 /// Outgoing message sent by server to client.
 #[derive(Debug, Clone)]
-pub struct OutgoingMessage<OUT : Message + Send> {
-    pub(crate)  destinations : Vec<ClientId>,
-    pub(crate)  message : OUT
+pub struct OutgoingMessage<OUT: Message + Send> {
+    pub(crate) destinations: Vec<ClientId>,
+    pub(crate) message: OUT,
 }
 
-impl<OUT : Message + Send> OutgoingMessage<OUT> {
+impl<OUT: Message + Send> OutgoingMessage<OUT> {
     /// Created a new server message around a CoreServerMessage
     #[inline]
-    pub fn new(message : OUT) -> OutgoingMessage<OUT> {
-        OutgoingMessage { destinations: Vec::new(), message }
+    pub fn new(message: OUT) -> OutgoingMessage<OUT> {
+        OutgoingMessage {
+            destinations: Vec::new(),
+            message,
+        }
     }
 
     /// Add a [`ClientId`] destination to message.
     #[inline]
-    pub fn add_destination(&mut self, client_id : ClientId){
+    pub fn add_destination(&mut self, client_id: ClientId) {
         self.destinations.push(client_id);
     }
 }
 
 /// Message received by client
 #[derive(Debug, Clone)]
-pub struct IncomingMessage<IN : Message + Send> {
-    pub client : ClientId,
-    pub message : IN
+pub struct IncomingMessage<IN: Message + Send> {
+    pub client: ClientId,
+    pub message: IN,
 }
 
-impl<IN : Message + Send> IncomingMessage<IN> {
+impl<IN: Message + Send> IncomingMessage<IN> {
     /// Create a new server incoming message
-    pub fn new(client : ClientId, message : IN) -> IncomingMessage<IN> {
-        IncomingMessage{ client, message }
+    pub fn new(client: ClientId, message: IN) -> IncomingMessage<IN> {
+        IncomingMessage { client, message }
     }
 }

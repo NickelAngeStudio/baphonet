@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -23,32 +23,51 @@ SOFTWARE.
 */
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::thread::Thread;
 use std::time::Duration;
 
+use baphonet::Message;
 use baphonet::client::Client;
 use baphonet::server::Server;
-use baphonet::Message;
+
+use crate::shared::message::ClientToServerMessage;
 
 pub mod message;
 
-
 /// Definition of clients size use for tests
-pub struct ClientSize { pub none : usize, pub one : usize, pub some : usize, pub all : usize  }
-pub const CLIENT_SIZE : ClientSize= ClientSize{ none: 0, one: 1, some: 32, all: 64 };
+pub struct ClientSize {
+    pub none: usize,
+    pub one: usize,
+    pub some: usize,
+    pub all: usize,
+}
+pub const CLIENT_SIZE: ClientSize = ClientSize {
+    none: 0,
+    one: 1,
+    some: 32,
+    all: 64,
+};
 
 /// Definition of worker count used for tests
-pub struct WorkerCount { pub one : usize, pub some : usize, pub all : usize  }
-pub const WORKER_COUNT : WorkerCount= WorkerCount{ one: 1, some: 4, all: 16 };
+pub struct WorkerCount {
+    pub one: usize,
+    pub some: usize,
+    pub all: usize,
+}
+pub const WORKER_COUNT: WorkerCount = WorkerCount {
+    one: 1,
+    some: 4,
+    all: 16,
+};
 
 /// IPv4 adress used for tests
-pub const TEST_IPV4 : Ipv4Addr = Ipv4Addr::LOCALHOST;
+pub const TEST_IPV4: Ipv4Addr = Ipv4Addr::LOCALHOST;
 
 /// TCP port used for tests
-pub const TEST_TCP_PORT : u16 = 50000;
+pub const TEST_TCP_PORT: u16 = 50000;
 
 /// Maximum loop wait time.
-pub const LOOP_WAIT_TIME : Duration = std::time::Duration::from_millis(5000);
-
+pub const LOOP_WAIT_TIME: Duration = std::time::Duration::from_millis(5000);
 
 #[macro_export]
 macro_rules! timeout_loop {
@@ -56,7 +75,7 @@ macro_rules! timeout_loop {
     ($duration : expr, $($arg:tt)*) => {
 
         let timestamp = std::time::Instant::now();
-        
+
         loop {
             $($arg)*
 
@@ -72,18 +91,19 @@ macro_rules! timeout_loop {
     };
 }
 
-
 /// Create a test socket from a port
-pub fn create_test_socket(port : u16) -> SocketAddr {
+pub fn create_test_socket(port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(TEST_IPV4), port)
 }
 
 /// Will create and start a server while finding a free port
-pub fn create_server_and_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(max_client : usize, worker_count : usize, client_count : usize) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
-
+pub fn create_server_and_clients<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    max_client: usize,
+    worker_count: usize,
+    client_count: usize,
+) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
     let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
-    let mut port : u16 = TEST_TCP_PORT;
-    
+    let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
         let socket = create_test_socket(port);
@@ -96,15 +116,20 @@ pub fn create_server_and_clients<IN : Message + Send + 'static, OUT : Message + 
 
     let clients = create_connect_clients(client_count, port);
 
+    std::thread::sleep(Duration::from_millis(500));
+
     (server, clients)
 }
 
 /// Will create and start a server while finding a free port
-pub fn create_server_and_clients_default<IN : Message + Send + 'static, OUT : Message + Send + 'static>(client_count : usize) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
-
+pub fn create_server_and_clients_default<
+    IN: Message + Send + 'static,
+    OUT: Message + Send + 'static,
+>(
+    client_count: usize,
+) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
     let mut server = Server::<IN, OUT>::new(CLIENT_SIZE.all, WORKER_COUNT.all).unwrap();
-    let mut port : u16 = TEST_TCP_PORT;
-    
+    let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
         let socket = create_test_socket(port);
@@ -117,15 +142,18 @@ pub fn create_server_and_clients_default<IN : Message + Send + 'static, OUT : Me
 
     let clients = create_connect_clients(client_count, port);
 
+    std::thread::sleep(Duration::from_millis(500));
+
     (server, clients)
 }
 
 /// Will create and start a server while finding a free port
-pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Send + 'static>(max_client : usize, worker_count : usize) -> (Server<IN, OUT>, u16) {
-
+pub fn create_server_and_port<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    max_client: usize,
+    worker_count: usize,
+) -> (Server<IN, OUT>, u16) {
     let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
-    let mut port : u16 = TEST_TCP_PORT;
-    
+    let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
         let socket = create_test_socket(port);
@@ -139,34 +167,52 @@ pub fn create_server_and_port<IN : Message + Send + 'static, OUT : Message + Sen
     (server, port)
 }
 
-
 /// Create and connect an array of clients
-pub fn create_connect_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(client_count : usize, port : u16) -> Vec<Client<IN, OUT>>{
+pub fn create_connect_clients<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    client_count: usize,
+    port: u16,
+) -> Vec<Client<IN, OUT>> {
     let mut clients = Vec::<Client<IN, OUT>>::new();
 
     for _ in 0..client_count {
-         let mut client = Client::<IN, OUT>::new();
-         client.connect(create_test_socket(port)).unwrap();
-         clients.push(client);
+        let mut client = Client::<IN, OUT>::new();
+        client.connect(create_test_socket(port)).unwrap();
+        clients.push(client);
     }
 
     clients
 }
 
 /// Close clients from vector
-pub fn close_clients<IN : Message + Send + 'static, OUT : Message + Send + 'static>(clients : &mut Vec<Client<IN, OUT>>) {
+pub fn close_clients<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    clients: &mut Vec<Client<IN, OUT>>,
+) {
     for client in clients {
         client.close().unwrap()
     }
 }
 
 /// Accumulate total from start to end
-pub fn accumulate(end : usize) -> usize{
-    let mut total : usize = 0;
+pub fn accumulate(end: usize) -> usize {
+    let mut total: usize = 0;
 
     for i in 0..end {
         total += i;
     }
 
     total
+}
+
+/// Compare client to server message
+pub fn compare_client_server_message(cts1: &ClientToServerMessage, cts2: &ClientToServerMessage) {
+    // Compare values
+    assert_eq!(cts1.p1, cts2.p1);
+    assert_eq!(cts1.p2, cts2.p2);
+    assert_eq!(cts1.p3, cts2.p3);
+    assert_eq!(cts1.p4, cts2.p4);
+    assert_eq!(cts1.ps.len(), cts2.ps.len());
+
+    for i in 0..cts1.ps.len() {
+        assert_eq!(cts1.ps[i], cts2.ps[i]);
+    }
 }

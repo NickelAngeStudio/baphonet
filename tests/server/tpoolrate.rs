@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -32,7 +32,7 @@ use crate::{shared::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, messag
 
 #[test]
 fn server_pool_rate_default() {
-    
+
     let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
 
     assert_eq!(server.pool_rate(), POOL_RATE_PER_SECOND);
@@ -51,7 +51,7 @@ fn server_pool_rate_set_before_start_ok() {
     }
 
     server.stop().unwrap();
-    
+
 
 }
 

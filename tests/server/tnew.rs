@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -92,4 +92,3 @@ fn server_new_err_worker_above_maximum() {
         Err(err) =>assert_eq!(err, ErrorServer::WorkerCountAboveMaximum),
     }
 }
-

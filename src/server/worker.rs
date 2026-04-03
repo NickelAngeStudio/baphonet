@@ -31,9 +31,10 @@ use std::{
 use crate::{
     MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE, client,
     server::{
-        ClientId, ErrorUpdate,
+        ClientId,
         channel::WorkerChannel,
         client::{Client, Clients},
+        error::ErrorUpdate,
         message::{
             IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage,
             SupervisorWorkerMessage, WorkerMessage,

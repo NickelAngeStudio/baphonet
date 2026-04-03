@@ -71,8 +71,9 @@ fn client_message_some_incoming() {
     let control = ServerToClientMessage::control();
     for _ in 0..SERVER_SEND_COUNT {
         for client_id in 0..clients.len() {
-            let mut outgoing = OutgoingMessage::new(ServerToClientMessage::control());
-            outgoing.add_destination(client_id as ClientId);
+
+            //let mut outgoing = OutgoingMessage::new(ServerToClientMessage::control());
+            //outgoing.add_destination(client_id as ClientId);
 
             //server.send(outgoing).unwrap();
         }

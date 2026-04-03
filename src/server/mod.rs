@@ -32,7 +32,6 @@ mod builder;
 
 pub(crate) mod client;
 
-#[doc(hidden)]
 pub mod error;
 
 pub mod message;
@@ -48,8 +47,6 @@ pub mod channel;
 mod sender;
 
 pub use builder::ServerBuilder;
-pub use error::ErrorServer;
-pub use error::ErrorUpdate;
 pub use server::Server;
 pub use status::ServerStatus;
 

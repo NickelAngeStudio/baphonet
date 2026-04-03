@@ -20,9 +20,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use baphonet::server::{ServerBuilder, error::ErrorSender};
+
+use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
+
 #[test]
 fn server_sender_create_inactive() {
-    todo!()
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let mut sender = server.sender();
+
+    match sender.send(0, ServerToClientMessage::control()) {
+        Ok(_) => panic!("Shouldn't be Ok()!"),
+        Err(err) => assert_eq!(err, ErrorSender::Inactive),
+    }
 }
 
 #[test]

@@ -77,6 +77,7 @@ pub enum ErrorServer {
 }
 
 /// Error given by the [`ServerMessageSender`].
+#[derive(Debug, PartialEq, Clone)]
 pub enum ErrorSender {
     /// Server is inactive
     Inactive,

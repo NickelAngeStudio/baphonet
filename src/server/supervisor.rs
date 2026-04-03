@@ -32,9 +32,10 @@ use std::{
 use crate::{
     Message,
     server::{
-        ClientId, ErrorServer, ErrorUpdate,
+        ClientId,
         channel::{SupervisorChannel, WorkerChannel},
         client::Clients,
+        error::{ErrorServer, ErrorUpdate},
         message::{
             ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
             SupervisorWorkerMessage, WorkerMessage,

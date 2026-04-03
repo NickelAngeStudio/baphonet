@@ -43,7 +43,7 @@ pub enum ErrorClient {
     /// Unhandled IO error
     UnhandledIOError(std::io::ErrorKind),
 
-    /// Unexpected error happened. 
+    /// Unexpected error happened.
     UnexpectedError,
 
     /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
@@ -51,6 +51,12 @@ pub enum ErrorClient {
 
     /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
     PoolRateAboveMaximum,
+
+    /// Incoming message size is below [`MINIMUM_OUTGOING_SIZE`].
+    OutgoingMessageSizeBelowMinimum,
+
+    /// Incoming message size is above [`MAXIMUM_OUTGOING_SIZE`].
+    OutgoingMessageSizeAboveMaximum,
 
     /// Error happened while trying to join worker thread
     CloseJoinError,

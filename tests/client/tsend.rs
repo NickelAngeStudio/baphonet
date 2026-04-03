@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use baphonet::client::{Client, ErrorClient};
+use baphonet::client::{Client, ErrorClient, builder::ClientBuilder};
 
 use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
@@ -32,8 +32,15 @@ fn client_send_ok() {
 }
 
 #[test]
+fn client_send_error_too_large() {
+    todo!()
+}
+
+#[test]
 fn client_send_error_disconnected() {
-    let mut client = Client::<ServerToClientMessage, ClientToServerMessage>::new();
+    let mut client = ClientBuilder::new()
+        .build::<ServerToClientMessage, ClientToServerMessage>()
+        .unwrap();
 
     let msg = ClientToServerMessage::control();
     match client.send(msg) {

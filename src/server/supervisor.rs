@@ -59,6 +59,9 @@ pub(crate) struct Supervisor<IN: Message + Send + 'static, OUT: Message + Send +
     /// Count of worker for this supervisor
     worker_count: usize,
 
+    /// Maximum size of incoming message
+    incoming_max_size: usize,
+
     /// Shared clients between threads
     clients: Clients,
 
@@ -84,6 +87,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         socket: SocketAddr,
         maximum_client: usize,
         worker_count: usize,
+        incoming_max_size: usize,
         pool_rate: u64,
         clients: Clients,
         channels: SupervisorChannel<IN, OUT>,
@@ -97,6 +101,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
                 Ok(Supervisor {
                     listener,
                     worker_count,
+                    incoming_max_size,
                     clients,
                     channels,
                     workers: Vec::<JoinHandle<()>>::with_capacity(worker_count),
@@ -167,9 +172,6 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
             SupervisorServerMessage::Pause => self.status = SupervisorStatus::Paused,
             SupervisorServerMessage::Resume => self.handle_server_message_resume(),
             SupervisorServerMessage::Stop => self.status = SupervisorStatus::Ending,
-            SupervisorServerMessage::PoolRate(pool_rate) => {
-                self.handle_server_message_pool_rate(pool_rate)
-            }
         }
     }
 
@@ -200,15 +202,6 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
         // Register timestamp
         self.last_pool = Instant::now();
-    }
-
-    /// Handle the new pool rate server message
-    #[inline]
-    fn handle_server_message_pool_rate(&mut self, pool_rate: u64) {
-        self.pool_rate_duration = Duration::from_millis(1000 / pool_rate);
-
-        // Notify server of poolrate change
-        self.send_update_to_server(SupervisorUpdate::PoolRate(pool_rate));
     }
 
     /// Handle the resume server message
@@ -369,7 +362,13 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
                 self.channels.rcv_worker.clone(),
             );
 
-            let mut worker = Worker::new(id, listener.clone(), clients.clone(), channels);
+            let mut worker = Worker::new(
+                id,
+                self.incoming_max_size,
+                listener.clone(),
+                clients.clone(),
+                channels,
+            );
             self.workers.push(thread::spawn(move || {
                 worker.execute();
             }));

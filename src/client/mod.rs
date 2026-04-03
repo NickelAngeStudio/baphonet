@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -25,6 +25,8 @@ SOFTWARE.
 #[doc(hidden)]
 pub mod client;
 
+pub mod builder;
+
 pub mod status;
 
 #[doc(hidden)]
@@ -36,21 +38,26 @@ pub mod message;
 
 pub(crate) mod worker;
 
-pub use error::ErrorClient as ErrorClient;
-pub use client::Client as Client;
+pub use client::Client;
+pub use error::ErrorClient;
 
+use crate::MAXIMUM_MESSAGE_SIZE;
+
+/// Minimum size of outgoing message.
+pub const MINIMUM_OUTGOING_SIZE: usize = 1;
+
+/// Default maximum size of outgoing message. (1KB)
+pub const DEFAULT_OUTGOING_SIZE: usize = 1024;
+
+/// Maximum size of incoming message.
+pub const MAXIMUM_OUTGOING_SIZE: usize = MAXIMUM_MESSAGE_SIZE;
 
 /// Default pool rate of the client worker per second
 /// used to receive message from server.
-/// 
-/// Higher pool rate will consume more resources and could be
-/// necessary for action game.
-/// 
-/// Pool rate can be overriden via [`Client::set_pool_rate()`].
-pub const POOL_RATE_PER_SECOND : u64 = 10;
+pub const DEFAULT_POOL_RATE_PER_SECOND: u64 = 30;
 
 /// Minimum pool rate that can be set.
-pub const MINIMUM_POOL_RATE_PER_SECOND : u64 = 1;
+pub const MINIMUM_POOL_RATE_PER_SECOND: u64 = 1;
 
 /// Maximum pool rate that can be set.
-pub const MAXIMUM_POOL_RATE_PER_SECOND : u64 = 1000;
+pub const MAXIMUM_POOL_RATE_PER_SECOND: u64 = 1000;

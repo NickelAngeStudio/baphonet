@@ -32,9 +32,8 @@ use std::{
 use crate::{
     Message,
     server::{
-        ClientId, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_POOL_RATE_PER_SECOND, POOL_RATE_PER_SECOND,
-        SERVER_MAXIMUM_CLIENT_CAP, SERVER_MINIMUM_CLIENT_CAP, SERVER_MINIMUM_WORKER_CAP,
-        ServerStatus,
+        ClientId, MAXIMUM_CLIENT, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_CLIENT,
+        MINIMUM_POOL_RATE_PER_SECOND, MINIMUM_WORKER, ServerStatus,
         channel::ServerChannel,
         client::{Client, Clients, ServerClient},
         error::ErrorServer,
@@ -52,74 +51,31 @@ const MS_JOIN_WAIT_DURATION_PER_WORKER: u64 = 10;
 /// Server end of baphonet
 pub struct Server<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Maximum client connection allowed
-    maximum_client: usize,
+    pub(super) maximum_client: usize,
 
     /// Count of worker threads allowed
-    worker_count: usize,
-
-    /// Communication channels between threads
-    channels: Option<ServerChannel<IN, OUT>>,
-
-    /// Shared clients list
-    clients: Clients,
-
-    /// Current status of the server
-    status: ServerStatus,
-
-    /// Supervisor thread handle
-    supervisor_handle: Option<JoinHandle<()>>,
+    pub(super) worker_count: usize,
 
     /// Pool rate of the server
-    pool_rate: u64,
+    pub(super) pool_rate: u64,
+
+    /// Maximum size of incoming message
+    pub(super) incoming_max_size: usize,
+
+    /// Communication channels between threads
+    pub(super) channels: Option<ServerChannel<IN, OUT>>,
+
+    /// Shared clients list
+    pub(super) clients: Clients,
+
+    /// Current status of the server
+    pub(super) status: ServerStatus,
+
+    /// Supervisor thread handle
+    pub(super) supervisor_handle: Option<JoinHandle<()>>,
 }
 
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT> {
-    /// Create new server that client can connect to.
-    ///
-    /// # Parameters
-    /// - `maximum_client` : Maximum possible client that are allowed to connect to server. Must
-    ///     be between [`SERVER_MINIMUM_CLIENT_CAP`] and [`SERVER_MAXIMUM_CLIENT_CAP`].
-    /// - `worker_count` : Count of worker used to manage connection, receive client message, etc. Must
-    ///     be between [`SERVER_MINIMUM_WORKER_CAP`] and `maximum_client` parameter.
-    ///
-    /// # Returns
-    /// - [`Result`]
-    ///     - Ok([`Server`]) on success.
-    ///     - Err([`ErrorServer::MaximumClientBelowMinimum`]) if maximum client is below [`SERVER_MINIMUM_CLIENT_CAP`].
-    ///     - Err([`ErrorServer::MaximumClientAboveMaximum`]) if maximum  client is above [`SERVER_MAXIMUM_CLIENT_CAP`].
-    ///     - Err([`ErrorServer::WorkerCountBelowMinimum`]) if worker count is below [`SERVER_MINIMUM_WORKER_CAP`].
-    ///     - Err([`ErrorServer::WorkerCountAboveMaximum`]) if worker count is above `maximum_client` parameter.
-    pub fn new(maximum_client: usize, worker_count: usize) -> Result<Server<IN, OUT>, ErrorServer> {
-        // Verify maximum_client and worker_count ranges
-        if maximum_client < SERVER_MINIMUM_CLIENT_CAP {
-            return Err(ErrorServer::MaximumClientBelowMinimum);
-        }
-        if maximum_client > SERVER_MAXIMUM_CLIENT_CAP {
-            return Err(ErrorServer::MaximumClientAboveMaximum);
-        }
-        if worker_count < SERVER_MINIMUM_WORKER_CAP {
-            return Err(ErrorServer::WorkerCountBelowMinimum);
-        }
-        if worker_count > maximum_client {
-            return Err(ErrorServer::WorkerCountAboveMaximum);
-        }
-
-        // Create shared client list
-        let mut clients = Vec::<Mutex<Option<Client>>>::with_capacity(maximum_client);
-        clients.resize_with(maximum_client, || Mutex::new(None));
-
-        // Return new created server
-        Ok(Server {
-            maximum_client,
-            worker_count,
-            clients: Arc::new(clients),
-            status: ServerStatus::Inactive,
-            channels: None,
-            supervisor_handle: None,
-            pool_rate: POOL_RATE_PER_SECOND,
-        })
-    }
-
     /// Start the server at specified socketr address.
     ///
     /// # Returns
@@ -135,51 +91,6 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
             ServerStatus::Inactive => self.create_supervisor(socket),
             _ => Err(ErrorServer::ServerAlreadyActive),
         }
-    }
-
-    /// Set the number of pool made per second. This can be set anytime.
-    ///
-    /// Each pool look for connection and receive incoming messages.
-    ///
-    /// Higher pool rate will consume more resources and could be
-    /// necessary for action game. (30 or 60 should be good).
-    ///
-    /// # Returns
-    /// - [`Result`]
-    ///     - Ok(()) if pool rate was changed with success.
-    ///     - Err([`ErrorServer::PoolRateBelowMinimum`]) if pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
-    ///     - Err([`ErrorServer::PoolRateAboveMaximum`]) if pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
-    pub fn set_pool_rate(&mut self, pool_rate: u64) -> Result<(), ErrorServer> {
-        if pool_rate < MINIMUM_POOL_RATE_PER_SECOND {
-            return Err(ErrorServer::PoolRateBelowMinimum);
-        }
-
-        if pool_rate > MAXIMUM_POOL_RATE_PER_SECOND {
-            return Err(ErrorServer::PoolRateAboveMaximum);
-        }
-
-        match self.channels.as_mut() {
-            Some(channels) => {
-                match channels.sdr_supervisor.send(SupervisorMessage::FromServer(
-                    SupervisorServerMessage::PoolRate(pool_rate),
-                )) {
-                    Ok(_) => {
-                        self.pool_rate = pool_rate;
-                        Ok(())
-                    }
-                    Err(_) => todo!(), // TODO: handle server channel lost #13
-                }
-            }
-            None => {
-                self.pool_rate = pool_rate;
-                Ok(())
-            }
-        }
-    }
-
-    /// Current pool rate of the server.
-    pub fn pool_rate(&self) -> u64 {
-        self.pool_rate
     }
 
     /// Returns current server status
@@ -361,6 +272,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
             socket,
             self.maximum_client,
             self.worker_count,
+            self.incoming_max_size,
             self.pool_rate,
             self.clients.clone(),
             supervisor_channels,

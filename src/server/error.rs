@@ -39,6 +39,18 @@ pub enum ErrorServer {
     /// Server worker count is above maximum client allowed.
     WorkerCountAboveMaximum,
 
+    /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
+    PoolRateBelowMinimum,
+
+    /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
+    PoolRateAboveMaximum,
+
+    /// Incoming message size is below [`MINIMUM_INCOMING_SIZE`].
+    IncomingMessageSizeBelowMinimum,
+
+    /// Incoming message size is above [`MAXIMUM_INCOMING_SIZE`].
+    IncomingMessageSizeAboveMaximum,
+
     /// Server is currently inactive
     ServerInactive,
 
@@ -50,12 +62,6 @@ pub enum ErrorServer {
 
     /// Provided socket address is already used by another process
     SocketAddressAlreadyUsed,
-
-    /// Pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
-    PoolRateBelowMinimum,
-
-    /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
-    PoolRateAboveMaximum,
 
     /// Error happened while trying to join supervisor thread
     ServerStopJoinError,

@@ -75,6 +75,9 @@ pub(crate) struct Worker<IN: Message + Send, OUT: Message + Send> {
     /// Id of the worker
     worker_id: WorkerId,
 
+    /// Maximum size of incoming message
+    incoming_max_size: usize,
+
     /// Shared TCP listener
     listener: Arc<Mutex<TcpListener>>,
 
@@ -92,12 +95,14 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     /// Create a new [`Worker`] from parameters.
     pub fn new(
         worker_id: WorkerId,
+        incoming_max_size: usize,
         listener: Arc<Mutex<TcpListener>>,
         clients: Clients,
         channels: WorkerChannel<IN, OUT>,
     ) -> Worker<IN, OUT> {
         Worker {
             worker_id,
+            incoming_max_size,
             listener,
             clients,
             status: WorkerStatus::Active,

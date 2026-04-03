@@ -31,8 +31,8 @@ use std::{
 use crate::{
     Message,
     client::{
-        ErrorClient, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_POOL_RATE_PER_SECOND,
-        POOL_RATE_PER_SECOND,
+        DEFAULT_POOL_RATE_PER_SECOND, ErrorClient, MAXIMUM_POOL_RATE_PER_SECOND,
+        MINIMUM_POOL_RATE_PER_SECOND,
         channel::{self, ClientChannel, create_client_worker_channels},
         message::{ClientMessage, WorkerMessage},
         status::{ClientStatus, WorkerStatus},
@@ -46,80 +46,22 @@ const MS_JOIN_WAIT_FOR_WORKER: u64 = 100;
 /// Client that connect to a Server
 pub struct Client<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Thread communication channels
-    channels: Option<ClientChannel<IN, OUT>>,
+    pub(super) channels: Option<ClientChannel<IN, OUT>>,
 
     /// Handle of the worker thread
-    worker_handle: Option<JoinHandle<()>>,
+    pub(super) worker_handle: Option<JoinHandle<()>>,
 
     /// Current status of the client
-    status: ClientStatus,
+    pub(super) status: ClientStatus,
 
     /// Worker pool rate
-    pool_rate: u64,
+    pub(super) pool_rate: u64,
+
+    /// Maximum size of outgoing message
+    pub(super) outgoing_max_size: usize,
 }
 
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT> {
-    /// Create a new [`Client`] for [`Server`](crate::server::Server).
-    ///
-    /// # Returns
-    /// A new [`Client`]
-    pub fn new() -> Client<IN, OUT> {
-        Client {
-            channels: None,
-            worker_handle: None,
-            status: ClientStatus::Disconnected,
-            pool_rate: POOL_RATE_PER_SECOND,
-        }
-    }
-
-    /// Set the number of pool made per second. This can be set anytime.
-    ///
-    /// Each pool try to receive incoming messages.
-    ///
-    /// Higher pool rate will consume more resources and could be
-    /// necessary for action game. (30 or 60 should be good for action).
-    ///
-    /// # Returns
-    /// - [`Result`]
-    ///     - Ok(()) if pool rate was changed with success.
-    ///     - Err([`ErrorClient::PoolRateBelowMinimum`]) if pool rate is below [`MINIMUM_POOL_RATE_PER_SECOND`](super::MINIMUM_POOL_RATE_PER_SECOND).
-    ///     - Err([`ErrorClient::PoolRateAboveMaximum`]) if pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
-    pub fn set_pool_rate(&mut self, pool_rate: u64) -> Result<(), ErrorClient> {
-        if pool_rate < MINIMUM_POOL_RATE_PER_SECOND {
-            return Err(ErrorClient::PoolRateBelowMinimum);
-        }
-
-        if pool_rate > MAXIMUM_POOL_RATE_PER_SECOND {
-            return Err(ErrorClient::PoolRateAboveMaximum);
-        }
-
-        match self.channels.as_mut() {
-            Some(channels) => {
-                match channels.sdr_worker.send(WorkerMessage::PoolRate(pool_rate)) {
-                    Ok(_) => {
-                        self.pool_rate = pool_rate;
-                        Ok(())
-                    }
-                    Err(_) => todo!(), // TODO: handle client channel lost #13
-                }
-            }
-            None => {
-                self.pool_rate = pool_rate;
-                Ok(())
-            }
-        }
-    }
-
-    /// Current pool rate of the client.
-    pub fn pool_rate(&self) -> u64 {
-        self.pool_rate
-    }
-
-    /// Get status of the client
-    pub fn status(&self) -> ClientStatus {
-        self.status
-    }
-
     /// Connect the client to [`Server`](crate::server::Server) from a [`SocketAddr`].
     ///
     /// # Returns
@@ -135,7 +77,12 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
                 // Create channels
                 let (client_channels, worker_channels) = create_client_worker_channels::<IN, OUT>();
 
-                match Worker::new(addr, self.pool_rate, worker_channels) {
+                match Worker::new(
+                    addr,
+                    self.outgoing_max_size,
+                    self.pool_rate,
+                    worker_channels,
+                ) {
                     Ok(mut worker) => {
                         self.channels = Some(client_channels);
                         self.status = ClientStatus::Connecting;
@@ -219,6 +166,11 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
             },
             None => Ok(()), // Server already stopped
         }
+    }
+
+    /// Get status of the client
+    pub fn status(&self) -> ClientStatus {
+        self.status
     }
 
     /// Shutdown worker threads

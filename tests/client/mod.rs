@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -24,9 +24,6 @@ SOFTWARE.
 
 /// Test for Client::connect()
 mod tconnect;
-
-/// Tests for Client pool rate
-mod tpoolrate;
 
 /// Tests for Client::close()
 mod tclose;

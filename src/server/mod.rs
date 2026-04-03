@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -24,9 +24,11 @@ SOFTWARE.
 
 use std::net::SocketAddr;
 
-
 #[doc(hidden)]
 mod server;
+
+#[doc(hidden)]
+mod builder;
 
 pub(crate) mod client;
 
@@ -34,9 +36,9 @@ pub(crate) mod client;
 pub mod error;
 
 pub mod message;
-pub mod worker;
 pub mod supervisor;
 mod task;
+pub mod worker;
 
 #[doc(hidden)]
 pub mod status;
@@ -44,36 +46,45 @@ pub mod status;
 #[doc(hidden)]
 pub mod channel;
 
-pub use error::ErrorServer as ErrorServer;
-pub use error::ErrorUpdate as ErrorUpdate;
-pub use status::ServerStatus as ServerStatus;
-pub use server::Server as Server;
+pub use builder::ServerBuilder;
+pub use error::ErrorServer;
+pub use error::ErrorUpdate;
+pub use server::Server;
+pub use status::ServerStatus;
+
+use crate::MAXIMUM_MESSAGE_SIZE;
 
 pub type ClientId = u16;
 
+/// Minimum size of incoming message.
+pub const MINIMUM_INCOMING_SIZE: usize = 1;
 
+/// Default maximum size of incoming message. (1KB)
+pub const DEFAULT_INCOMING_SIZE: usize = 1024;
 
+/// Maximum size of incoming message.
+pub const MAXIMUM_INCOMING_SIZE: usize = MAXIMUM_MESSAGE_SIZE;
 
 /// Current minimum client cap
-pub const SERVER_MINIMUM_CLIENT_CAP : usize = 1;
+pub const MINIMUM_CLIENT: usize = 1;
+
+/// Default maximum client for builder
+pub const DEFAULT_MAXIMUM_CLIENT: usize = 32;
 
 /// Current maximum client cap
-pub const SERVER_MAXIMUM_CLIENT_CAP : usize = ClientId::MAX as usize;
+pub const MAXIMUM_CLIENT: usize = ClientId::MAX as usize;
 
 /// Minimum worker count cap
-pub const SERVER_MINIMUM_WORKER_CAP : usize = 1;
+pub const MINIMUM_WORKER: usize = 1;
+
+/// Current minimum worker count
+pub const DEFAULT_WORKER_COUNT: usize = 4;
 
 /// Default pool rate of the supervisor worker per second.
-/// Each pool look for connection and receive incoming messages.
-/// 
-/// Higher pool rate will consume more resources and could be
-/// necessary for action game.
-/// 
-/// Pool rate can be overriden via [`Server::set_pool_rate()`].
-pub const POOL_RATE_PER_SECOND : u64 = 10;
+pub const DEFAULT_POOL_RATE_PER_SECOND: u64 = 30;
 
 /// Minimum pool rate that can be set.
-pub const MINIMUM_POOL_RATE_PER_SECOND : u64 = 1;
+pub const MINIMUM_POOL_RATE_PER_SECOND: u64 = 1;
 
 /// Maximum pool rate that can be set.
-pub const MAXIMUM_POOL_RATE_PER_SECOND : u64 = 1000;
+pub const MAXIMUM_POOL_RATE_PER_SECOND: u64 = 1000;

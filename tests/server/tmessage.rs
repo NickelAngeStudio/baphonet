@@ -176,6 +176,11 @@ fn server_message_update_error_outgoing_too_large() {
 }
 
 #[test]
+fn server_message_update_error_incoming_too_large() {
+    todo!()
+}
+
+#[test]
 fn server_message_update_error_outgoing_serialize_error() {
     todo!()
 }

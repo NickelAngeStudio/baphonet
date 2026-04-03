@@ -28,7 +28,8 @@ use std::time::Duration;
 
 use baphonet::Message;
 use baphonet::client::Client;
-use baphonet::server::Server;
+use baphonet::client::builder::ClientBuilder;
+use baphonet::server::{Server, ServerBuilder};
 
 use crate::shared::message::ClientToServerMessage;
 
@@ -102,7 +103,11 @@ pub fn create_server_and_clients<IN: Message + Send + 'static, OUT: Message + Se
     worker_count: usize,
     client_count: usize,
 ) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
-    let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
+    let mut server = ServerBuilder::new()
+        .maximum_client(max_client)
+        .worker(worker_count)
+        .build()
+        .unwrap();
     let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
@@ -128,7 +133,11 @@ pub fn create_server_and_clients_default<
 >(
     client_count: usize,
 ) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
-    let mut server = Server::<IN, OUT>::new(CLIENT_SIZE.all, WORKER_COUNT.all).unwrap();
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .worker(WORKER_COUNT.some)
+        .build()
+        .unwrap();
     let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
@@ -152,7 +161,11 @@ pub fn create_server_and_port<IN: Message + Send + 'static, OUT: Message + Send 
     max_client: usize,
     worker_count: usize,
 ) -> (Server<IN, OUT>, u16) {
-    let mut server = Server::<IN, OUT>::new(max_client, worker_count).unwrap();
+    let mut server = ServerBuilder::new()
+        .maximum_client(max_client)
+        .worker(worker_count)
+        .build()
+        .unwrap();
     let mut port: u16 = TEST_TCP_PORT;
 
     timeout_loop! {
@@ -173,9 +186,10 @@ pub fn create_connect_clients<IN: Message + Send + 'static, OUT: Message + Send 
     port: u16,
 ) -> Vec<Client<IN, OUT>> {
     let mut clients = Vec::<Client<IN, OUT>>::new();
+    let client_builder = ClientBuilder::new();
 
     for _ in 0..client_count {
-        let mut client = Client::<IN, OUT>::new();
+        let mut client = client_builder.build().unwrap();
         client.connect(create_test_socket(port)).unwrap();
         clients.push(client);
     }

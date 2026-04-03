@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,15 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-/// Tests for Server::new()
-mod tnew;
-
 /// Tests for Server::start()
 mod tstart;
-
-/// Tests for Server::set_pool_rate()
-mod tpoolrate;
 
 /// Tests for Server::stop()
 mod tstop;

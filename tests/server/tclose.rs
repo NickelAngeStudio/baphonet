@@ -27,7 +27,7 @@ use std::{thread, time::Duration};
 use baphonet::{
     client::status::ClientStatus,
     server::{
-        ClientId, ErrorServer, ErrorUpdate, Server,
+        ClientId, ErrorServer, ErrorUpdate, Server, ServerBuilder,
         message::{ServerMessage, SupervisorUpdate},
     },
 };
@@ -63,11 +63,9 @@ fn server_close_connection_ok_all() {
 
 #[test]
 fn server_close_connection_err_inactive() {
-    let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(
-        CLIENT_SIZE.all,
-        WORKER_COUNT.some,
-    )
-    .unwrap();
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
 
     match server.close_connection(0) {
         Ok(_) => panic!("Shouldn't be Ok()!"),

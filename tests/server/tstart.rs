@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -24,16 +24,19 @@ SOFTWARE.
 
 use std::net::{IpAddr, SocketAddr};
 
-use baphonet::server::{ErrorServer, Server, ServerStatus};
+use baphonet::server::{ErrorServer, Server, ServerBuilder, ServerStatus};
 
-use crate::shared::{CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT, message::{ClientToServerMessage, ServerToClientMessage}};
-
+use crate::shared::{
+    CLIENT_SIZE, TEST_IPV4, TEST_TCP_PORT, WORKER_COUNT,
+    message::{ClientToServerMessage, ServerToClientMessage},
+};
 
 #[test]
 fn server_start_ok() {
-
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 1);
-    let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
 
     match server.start(socket) {
         Ok(_) => assert_eq!(server.status(), ServerStatus::Starting),
@@ -45,9 +48,10 @@ fn server_start_ok() {
 
 #[test]
 fn server_start_err_active() {
-    
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 2);
-    let mut server = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
 
     server.start(socket).unwrap();
     match server.start(socket) {
@@ -62,8 +66,12 @@ fn server_start_err_active() {
 fn server_start_err_address_already_used() {
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 4);
 
-    let mut server1 = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
-    let mut server2 = Server::<ClientToServerMessage, ServerToClientMessage>::new(CLIENT_SIZE.all, WORKER_COUNT.some).unwrap();
+    let mut server1 = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+    let mut server2 = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
 
     server1.start(socket).unwrap();
     match server2.start(socket) {

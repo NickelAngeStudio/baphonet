@@ -54,6 +54,9 @@ pub struct Worker<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Size of incoming message if any
     inc_size: Option<usize>,
 
+    /// Maximum outgoing size for message
+    outgoing_max_size: usize,
+
     /// Worker last pool instant
     last_pool: Instant,
 
@@ -65,6 +68,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
     /// Create new worker from socket address and channels.
     pub fn new(
         addr: SocketAddr,
+        outgoing_max_size: usize,
         pool_rate: u64,
         channels: WorkerChannel<IN, OUT>,
     ) -> Result<Worker<IN, OUT>, ErrorClient> {
@@ -76,6 +80,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                         channels,
                         status: WorkerStatus::Starting,
                         inc_size: None,
+                        outgoing_max_size,
                         last_pool: Instant::now(),
                         pool_rate_duration: Duration::from_millis(1000 / pool_rate),
                     }),

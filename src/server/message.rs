@@ -52,9 +52,6 @@ pub enum SupervisorUpdate {
     /// An error occurred
     Error(ErrorUpdate),
 
-    /// Server pool rate changed
-    PoolRate(u64),
-
     /// Server is currently full
     Full,
 
@@ -75,9 +72,6 @@ pub enum SupervisorMessage {
 /// Supervisor message sent from server
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorServerMessage {
-    /// Modify pool rate per second of the supervisor
-    PoolRate(u64),
-
     /// Pause the supervisor
     Pause,
 

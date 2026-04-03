@@ -20,28 +20,67 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::{
-    Message,
-    client::{error::ErrorWorker, status::WorkerStatus},
-};
-
-/// Message sent to client from worker
-pub enum ClientMessage<IN: Message + Send + 'static> {
-    /// Incoming message from server
-    Incoming(IN),
-
-    /// An error occurred from the worker thread
-    Error(ErrorWorker),
-
-    /// Worker status changed
-    StatusChanged(WorkerStatus),
+#[test]
+fn server_sender_create_inactive() {
+    todo!()
 }
 
-/// Message sent to worker from client
-pub enum WorkerMessage<OUT: Message + Send + 'static> {
-    /// Send a message to the server
-    Send(OUT),
+#[test]
+fn server_sender_create_paused() {
+    todo!()
+}
 
-    /// Stop the worker thread
-    Stop,
+#[test]
+fn server_sender_stop_start_server() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_one() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_some() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_all() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_vec_one() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_vec_some() {
+    todo!()
+}
+
+#[test]
+fn server_sender_send_vec_all() {
+    todo!()
+}
+
+#[test]
+fn server_sender_error_inactive() {
+    todo!()
+}
+
+#[test]
+fn server_sender_error_paused() {
+    todo!()
+}
+
+#[test]
+fn server_sender_error_disconnected() {
+    todo!()
+}
+
+#[test]
+fn server_sender_error_no_destination() {
+    todo!()
 }

@@ -70,7 +70,7 @@ pub enum ErrorWorker {
     /// Outgoing message serialize failed
     OutgoingSerializeError,
 
-    /// Outgoing message is larger than [`MAXIMUM_MESSAGE_SIZE`](super::super::MAXIMUM_MESSAGE_SIZE).
+    /// Outgoing message is larger than [`MAXIMUM_OUTGOING_SIZE`](super::super::MAXIMUM_OUTGOING_SIZE).
     OutgoingMessageTooLarge,
 
     /// Connection to server lost

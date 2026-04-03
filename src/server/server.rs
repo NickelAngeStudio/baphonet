@@ -1,30 +1,27 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -32,21 +29,21 @@ use std::{
 use crate::{
     Message,
     server::{
-        ClientId, MAXIMUM_CLIENT, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_CLIENT,
-        MINIMUM_POOL_RATE_PER_SECOND, MINIMUM_WORKER, ServerStatus,
+        ClientId, ServerStatus,
         channel::ServerChannel,
-        client::{Client, Clients, ServerClient},
+        client::{Clients, ServerClient},
         error::ErrorServer,
         message::{
-            OutgoingMessage, ServerMessage, SupervisorMessage, SupervisorServerMessage,
-            SupervisorUpdate, WorkerMessage,
+            ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
+            WorkerMessage,
         },
+        sender::ServerMessageSender,
         supervisor::Supervisor,
     },
 };
 
 /// Milliseconds of wait time per worker.
-const MS_JOIN_WAIT_DURATION_PER_WORKER: u64 = 10;
+const MS_JOIN_WAIT_DURATION_PER_WORKER: u64 = 50;
 
 /// Server end of baphonet
 pub struct Server<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
@@ -63,7 +60,7 @@ pub struct Server<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     pub(super) incoming_max_size: usize,
 
     /// Communication channels between threads
-    pub(super) channels: Option<ServerChannel<IN, OUT>>,
+    pub(super) channels: ServerChannel<IN, OUT>,
 
     /// Shared clients list
     pub(super) clients: Clients,
@@ -89,8 +86,16 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     pub fn start(&mut self, socket: SocketAddr) -> Result<(), ErrorServer> {
         match self.status {
             ServerStatus::Inactive => self.create_supervisor(socket),
-            _ => Err(ErrorServer::ServerAlreadyActive),
+            _ => Err(ErrorServer::AlreadyActive),
         }
+    }
+
+    /// Get a new [`ServerSender`] that can send message to clients.
+    ///
+    /// This can be used to create a sender for each thread
+    /// that can send a message to client.
+    pub fn sender(&mut self) -> ServerMessageSender<OUT> {
+        self.channels.sender_channel(self.status())
     }
 
     /// Returns current server status
@@ -105,8 +110,8 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Some([`ServerMessage`]) if message found.
     ///     - None if no message found.
     pub fn message(&mut self) -> Option<ServerMessage<IN>> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.rcv_server.try_recv() {
+        match self.channels.rcv_server.as_mut() {
+            Some(channel) => match channel.try_recv() {
                 Ok(message) => match &message {
                     ServerMessage::Update(supervisor_update) => match supervisor_update {
                         SupervisorUpdate::Active => {
@@ -142,29 +147,13 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Err([`ErrorServer::ServerInactive`]) if server hasn't started
     ///     - Err([`ErrorServer::UnexpectedError`]) if unexpected error happened.
     pub fn close_connection(&mut self, client_id: ClientId) -> Result<(), ErrorServer> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels
-                .sdr_worker
-                .send(WorkerMessage::Disconnect(client_id))
-            {
+        match self.channels.sdr_worker.as_mut() {
+            Some(channel) => match channel.send(WorkerMessage::Disconnect(client_id)) {
                 Ok(_) => Ok(()),
                 Err(_) => Err(ErrorServer::UnexpectedError),
             },
-            None => Err(ErrorServer::ServerInactive),
+            None => Err(ErrorServer::Inactive),
         }
-    }
-
-    /// Send message to connected clients.
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if message was sent to thread.
-    ///     - Err([`Error::ServerInactive`]) if server hasn't started
-    ///     - Err([`Error::ServerPaused`]) if server is paused.
-    ///     - Err([`Error::ServerSendNoDestination`]) if no destination specified
-    ///     - Err([`Error::Unexpected`]) if unexpected error happened.
-    pub fn send(&mut self, message: OutgoingMessage<OUT>) -> Result<(), ErrorServer> {
-        todo!()
     }
 
     /// Pause the server. Message are ignored but connections are maintained.
@@ -201,17 +190,16 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
     ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
     pub fn stop(&mut self) -> Result<(), ErrorServer> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels
-                .sdr_supervisor
-                .send(SupervisorMessage::FromServer(SupervisorServerMessage::Stop))
-            {
-                Ok(_) => {
-                    self.status = ServerStatus::Ending;
-                    self.join_threads_timeout()
+        match self.channels.sdr_supervisor.as_mut() {
+            Some(channel) => {
+                match channel.send(SupervisorMessage::FromServer(SupervisorServerMessage::Stop)) {
+                    Ok(_) => {
+                        self.status = ServerStatus::Ending;
+                        self.join_threads_timeout()
+                    }
+                    Err(_) => todo!(), // TODO: Handle channel lost #13
                 }
-                Err(_) => todo!(), // TODO: Handle channel lost #13
-            },
+            }
             None => Ok(()), // Server already stopped
         }
     }
@@ -241,7 +229,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
                                 Ok(_) => {
                                     break 'join;
                                 }
-                                Err(_) => return Err(ErrorServer::ServerStopJoinError),
+                                Err(_) => return Err(ErrorServer::StopJoinError),
                             },
                             None => return Err(ErrorServer::UnexpectedError), // Should never happens
                         };
@@ -252,12 +240,11 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
 
             if ts.elapsed() > join_wait_duration {
                 // Join took too long
-                return Err(ErrorServer::ServerStopTimeout);
+                return Err(ErrorServer::StopTimeout);
             }
         }
 
-        // Remove channels
-        self.channels = None;
+        self.channels.clear(); // Clear channels
         self.status = ServerStatus::Inactive;
         Ok(())
     }
@@ -265,9 +252,6 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     /// Create the supervisor thread
     #[inline]
     fn create_supervisor(&mut self, socket: SocketAddr) -> Result<(), ErrorServer> {
-        // Create channels
-        let (server_channels, supervisor_channels) = ServerChannel::new();
-
         match Supervisor::<IN, OUT>::new(
             socket,
             self.maximum_client,
@@ -275,14 +259,13 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
             self.incoming_max_size,
             self.pool_rate,
             self.clients.clone(),
-            supervisor_channels,
+            self.channels.supervisor_channels(),
         ) {
             Ok(mut supervisor) => {
                 self.supervisor_handle = Some(thread::spawn(move || {
                     supervisor.execute();
                 }));
 
-                self.channels = Some(server_channels);
                 self.status = ServerStatus::Starting;
 
                 Ok(())
@@ -296,7 +279,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
 #[cfg(debug_assertions)]
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Drop for Server<IN, OUT> {
     fn drop(&mut self) {
-        match self.channels.as_mut() {
+        match self.channels.sdr_supervisor {
             Some(_) => eprintln!("Server::stop() should be called before program end!"),
             None => {}
         }

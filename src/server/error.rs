@@ -52,10 +52,10 @@ pub enum ErrorServer {
     IncomingMessageSizeAboveMaximum,
 
     /// Server is currently inactive
-    ServerInactive,
+    Inactive,
 
     /// Server is already active
-    ServerAlreadyActive,
+    AlreadyActive,
 
     /// Provided socket for start is invalid
     SocketInvalid,
@@ -64,16 +64,31 @@ pub enum ErrorServer {
     SocketAddressAlreadyUsed,
 
     /// Error happened while trying to join supervisor thread
-    ServerStopJoinError,
+    StopJoinError,
 
     /// Unexpected error happened
     UnexpectedError,
 
     /// Server took too much time stopping.
-    ServerStopTimeout,
+    StopTimeout,
 
     /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),
+}
+
+/// Error given by the [`ServerMessageSender`].
+pub enum ErrorSender {
+    /// Server is inactive
+    Inactive,
+
+    /// Sender is currently paused
+    Paused,
+
+    /// Sender is disconnected from the server (server dropped).
+    Disconnected,
+
+    /// Message has no destinations when using [`send_vec`].
+    NoDestination,
 }
 
 /// Error given via ServerMessage::update()

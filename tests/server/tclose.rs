@@ -69,7 +69,7 @@ fn server_close_connection_err_inactive() {
 
     match server.close_connection(0) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorServer::ServerInactive),
+        Err(err) => assert_eq!(err, ErrorServer::Inactive),
     }
 
     server.stop().unwrap();

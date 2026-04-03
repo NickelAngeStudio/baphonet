@@ -212,6 +212,21 @@ fn server_to_client_message_deserialize_buffer_incomplete() {
     }
 }
 
+pub fn assert_server_to_client_message(
+    control: &ServerToClientMessage,
+    msg: &ServerToClientMessage,
+) {
+    assert_eq!(control.pu8, msg.pu8);
+    assert_eq!(control.pu16, msg.pu16);
+    assert_eq!(control.pu32, msg.pu32);
+    assert_eq!(control.pu64, msg.pu64);
+    assert_eq!(control.pu128, msg.pu128);
+
+    assert_eq!(control.pstring1, msg.pstring1);
+    assert_eq!(control.pstring2, msg.pstring2);
+    assert_eq!(control.pstring3, msg.pstring3);
+}
+
 #[test]
 fn server_to_client_message_serialize_deserialize() {
     let message = ServerToClientMessage::control();
@@ -225,15 +240,7 @@ fn server_to_client_message_serialize_deserialize() {
     let message2 = ServerToClientMessage::deserialize(&buffer).unwrap();
 
     // Compare values
-    assert_eq!(message.pu8, message2.pu8);
-    assert_eq!(message.pu16, message2.pu16);
-    assert_eq!(message.pu32, message2.pu32);
-    assert_eq!(message.pu64, message2.pu64);
-    assert_eq!(message.pu128, message2.pu128);
-
-    assert_eq!(message.pstring1, message2.pstring1);
-    assert_eq!(message.pstring2, message2.pstring2);
-    assert_eq!(message.pstring3, message2.pstring3);
+    assert_server_to_client_message(&message, &message2);
 }
 
 #[test]

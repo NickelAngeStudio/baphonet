@@ -56,7 +56,7 @@ fn server_start_err_active() {
     server.start(socket).unwrap();
     match server.start(socket) {
         Ok(_) => panic!("start() shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorServer::ServerAlreadyActive),
+        Err(err) => assert_eq!(err, ErrorServer::AlreadyActive),
     }
 
     server.stop().unwrap();

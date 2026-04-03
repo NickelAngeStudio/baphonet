@@ -31,9 +31,8 @@ use std::{
 use crate::{
     Message,
     client::{
-        DEFAULT_POOL_RATE_PER_SECOND, ErrorClient, MAXIMUM_POOL_RATE_PER_SECOND,
-        MINIMUM_POOL_RATE_PER_SECOND,
-        channel::{self, ClientChannel, create_client_worker_channels},
+        ErrorClient,
+        channel::{ClientChannel, create_client_worker_channels},
         message::{ClientMessage, WorkerMessage},
         status::{ClientStatus, WorkerStatus},
         worker::Worker,

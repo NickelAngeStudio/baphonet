@@ -1,30 +1,30 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+use std::sync::mpsc::Sender;
 
 use crate::{
     Message,
-    server::{ClientId, error::ErrorUpdate, worker::WorkerId},
+    server::{ClientId, ServerStatus, error::ErrorUpdate, worker::WorkerId},
 };
 
 /// Message and updates sent to and received by server
@@ -57,6 +57,19 @@ pub enum SupervisorUpdate {
 
     /// Supervisor has ended
     Ended,
+}
+
+/// Message sent to sender by server
+#[derive(Debug, Clone)]
+pub enum SenderMessage<OUT: Message + Send + 'static> {
+    /// Server status changed.
+    Status(ServerStatus),
+
+    /// Get the newest reference of sender
+    Reference(Sender<WorkerMessage<OUT>>),
+
+    /// Ping the [`ServerMessageSender`] to see if still alive
+    Ping,
 }
 
 /// Message sent to and received by supervisor
@@ -134,19 +147,24 @@ pub struct OutgoingMessage<OUT: Message + Send> {
 }
 
 impl<OUT: Message + Send> OutgoingMessage<OUT> {
-    /// Created a new server message around a CoreServerMessage
+    /// Wrap an outgoing message with destinations
     #[inline]
-    pub fn new(message: OUT) -> OutgoingMessage<OUT> {
+    pub fn new(client_id: ClientId, message: OUT) -> OutgoingMessage<OUT> {
+        let destinations = vec![client_id];
         OutgoingMessage {
-            destinations: Vec::new(),
+            destinations,
             message,
         }
     }
 
-    /// Add a [`ClientId`] destination to message.
+    /// Wrap an outgoing message with multiple destinations in a vector.
     #[inline]
-    pub fn add_destination(&mut self, client_id: ClientId) {
-        self.destinations.push(client_id);
+    pub fn new_vec(destinations: &Vec<ClientId>, message: OUT) -> OutgoingMessage<OUT> {
+        let destinations = destinations.clone();
+        OutgoingMessage {
+            destinations,
+            message,
+        }
     }
 }
 

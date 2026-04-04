@@ -20,7 +20,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::sync::{
+    Mutex,
+    mpsc::{Receiver, Sender, TryRecvError},
+};
 
 use crate::{
     Message,
@@ -35,9 +38,9 @@ use crate::{
 ///
 /// Multiple dispatcher can be created and shared among
 /// threads.
-pub struct Dispatcher<OUT: Message + Send + 'static> {
+pub struct Dispatcher<OUT: Message + Send> {
     /// Unique receiver channel for dispatcher
-    rcv_dispatcher: Receiver<DispatcherMessage<OUT>>,
+    rcv_dispatcher: Mutex<Receiver<DispatcherMessage<OUT>>>,
 
     /// Clone of Sender channel for worker message
     pub(crate) sdr_worker: Option<Sender<WorkerMessage<OUT>>>,
@@ -46,14 +49,14 @@ pub struct Dispatcher<OUT: Message + Send + 'static> {
     client_status: ClientStatus,
 }
 
-impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
+impl<OUT: Message + Send> Dispatcher<OUT> {
     /// Create a new instance of [`Dispatcher`] with a message receiver.
     pub(crate) fn new(
         rcv_dispatcher: Receiver<DispatcherMessage<OUT>>,
         client_status: ClientStatus,
     ) -> Dispatcher<OUT> {
         Dispatcher {
-            rcv_dispatcher: rcv_dispatcher,
+            rcv_dispatcher: Mutex::new(rcv_dispatcher),
             sdr_worker: None,
             client_status,
         }
@@ -96,30 +99,36 @@ impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
     ///     - Err([`ErrorDispatcher::Disconnected`]) if client was dropped.
     #[inline]
     fn update(&mut self) -> Result<(), ErrorDispatcher> {
-        'update: loop {
-            match self.rcv_dispatcher.try_recv() {
-                Ok(message) => match message {
-                    DispatcherMessage::Status(client_status) => {
-                        match client_status {
-                            // Remove sender if inactive
-                            ClientStatus::Disconnected | ClientStatus::Disconnecting => {
-                                self.sdr_worker = None
+        match self.rcv_dispatcher.lock() {
+            Ok(rcv) => {
+                'update: loop {
+                    match rcv.try_recv() {
+                        Ok(message) => match message {
+                            DispatcherMessage::Status(client_status) => {
+                                match client_status {
+                                    // Remove sender if inactive
+                                    ClientStatus::Disconnected | ClientStatus::Disconnecting => {
+                                        self.sdr_worker = None
+                                    }
+                                    _ => {}
+                                }
+                                self.client_status = client_status
                             }
+                            DispatcherMessage::Reference(sender) => self.sdr_worker = Some(sender),
                             _ => {}
-                        }
-                        self.client_status = client_status
+                        },
+                        Err(err) => match err {
+                            TryRecvError::Empty => break 'update,
+                            TryRecvError::Disconnected => {
+                                return Err(ErrorDispatcher::ChannelDisconnected);
+                            }
+                        },
                     }
-                    DispatcherMessage::Reference(sender) => self.sdr_worker = Some(sender),
-                    _ => {}
-                },
-                Err(err) => match err {
-                    TryRecvError::Empty => break 'update,
-                    TryRecvError::Disconnected => return Err(ErrorDispatcher::ChannelDisconnected),
-                },
+                }
+                Ok(())
             }
+            Err(_) => todo!(), // TODO: Handle  mutex error #13
         }
-
-        Ok(())
     }
 
     /// Returns the status of the dispatcher.

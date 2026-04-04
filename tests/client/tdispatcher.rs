@@ -24,11 +24,14 @@ SOFTWARE.
 
 use std::thread::{self, JoinHandle};
 
-use baphonet::client::{Client, ErrorClient, builder::ClientBuilder, status::ClientStatus};
+use baphonet::{
+    client::{Client, ErrorClient, builder::ClientBuilder, status::ClientStatus},
+    server::message::ServerMessage,
+};
 
 use crate::{
     shared::{
-        CLIENT_SIZE, DISPATCHER_COUNT, WORKER_COUNT, close_clients,
+        CLIENT_SIZE, DISPATCHER_COUNT, WORKER_COUNT, close_clients, compare_client_server_message,
         create_server_and_clients_default, create_server_and_port,
         message::{ClientToServerMessage, ServerToClientMessage},
     },
@@ -39,7 +42,7 @@ use crate::{
 const MSG_PER_DISPATCHER_THREAD: usize = 64;
 
 #[test]
-fn dispatcher_create_disconnected() {
+fn dispatcher_client_create_disconnected() {
     let (mut _server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
         WORKER_COUNT.all,
@@ -53,7 +56,7 @@ fn dispatcher_create_disconnected() {
 }
 
 #[test]
-fn dispatcher_create_connected() {
+fn dispatcher_client_create_connected() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
         ServerToClientMessage,
@@ -74,84 +77,96 @@ fn dispatcher_create_connected() {
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_one() {
-    let (mut server, mut clients) = create_server_and_clients_default::<
-        ClientToServerMessage,
-        ServerToClientMessage,
-    >(CLIENT_SIZE.one);
-
-    timeout_loop! {
-        match clients[0].message(){
-            Some(_) => {},
-            None => break,
-        }
-    }
-
-    let mut handles = Vec::<JoinHandle<()>>::new();
-    for mut client in &mut clients {
-        for i in 0..DISPATCHER_COUNT.one {
-            let mut dispatcher = &clients[i].dispatcher();
-            let handle = thread::spawn(move || {
-                for j in 0..MSG_PER_DISPATCHER_THREAD {
-                    dispatcher.send(ClientToServerMessage::control()).unwrap();
-                }
-            });
-            handles.push(handle);
-        }
-    }
+fn dispatcher_client_client_send_one() {
+    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.one);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.some);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.all);
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_some() {
+fn dispatcher_client_send_some() {
+    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.one);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.some);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.all);
+}
+
+#[test]
+fn dispatcher_client_send_all() {
+    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.one);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.some);
+    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.all);
+}
+
+#[test]
+fn dispatcher_client_error_disconnected() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_some_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_some_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_some_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_error_disconnected() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_error_channel_disconnected() {
+fn dispatcher_client_error_channel_disconnected() {
     todo!()
 }
 
 #[test]
 fn client_send_error_too_large() {
     todo!()
+}
+
+fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count: usize) {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(client_count);
+
+    let mut handles = Vec::<JoinHandle<()>>::new();
+    for client in &mut clients {
+        timeout_loop! {
+            match client.message(){
+                Some(_) => {},
+                None => break,
+            }
+        }
+
+        for _ in 0..dispatcher_client_count {
+            let mut dispatcher = client.dispatcher();
+            let handle = thread::spawn(move || {
+                for _ in 0..MSG_PER_DISPATCHER_THREAD {
+                    dispatcher.send(ClientToServerMessage::control()).unwrap();
+                }
+            });
+            handles.push(handle);
+        }
+    }
+
+    let incoming_total: usize = MSG_PER_DISPATCHER_THREAD * dispatcher_client_count * clients.len();
+    let mut incoming_count: usize = 0;
+    let control = ClientToServerMessage::control();
+    println!(
+        "dispatcher_client_send_dispatch C={}, D={}, I={} messages...",
+        client_count, dispatcher_client_count, incoming_total
+    );
+    // Make sure server received messages.
+    timeout_loop! {
+        match server.message(){
+            Some(msg) => match msg {
+                ServerMessage::Incoming(incoming_message) => {
+                    compare_client_server_message(&incoming_message.message, &control);
+                    incoming_count += 1;
+                    if incoming_total == incoming_count {
+                        break ;
+                    }
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    // Join threads
+    for handle in handles {
+        handle.join().unwrap()
+    }
+
+    close_clients(&mut clients);
+    server.stop().unwrap();
 }

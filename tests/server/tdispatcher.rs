@@ -49,92 +49,32 @@ fn dispatcher_stop_start_server() {
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_one() {
+fn dispatcher_send_one() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_some() {
+fn dispatcher_send_some() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_one_dispatcher_all() {
+fn dispatcher_send_all() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_some_dispatcher_one() {
+fn dispatcher_send_vec_one() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_some_dispatcher_some() {
+fn dispatcher_send_vec_some() {
     todo!()
 }
 
 #[test]
-fn dispatcher_send_some_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_all_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_one_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_one_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_one_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_some_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_some_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_some_dispatcher_all() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_all_dispatcher_one() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_all_dispatcher_some() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_send_vec_all_dispatcher_all() {
+fn dispatcher_send_vec_all() {
     todo!()
 }
 

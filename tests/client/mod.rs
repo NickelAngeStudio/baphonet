@@ -32,4 +32,4 @@ mod tclose;
 mod tmessage;
 
 /// Tests for Client::send()
-mod tsend;
+mod tdispatcher;

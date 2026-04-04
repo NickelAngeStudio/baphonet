@@ -61,6 +61,12 @@ pub const WORKER_COUNT: WorkerCount = WorkerCount {
     all: 16,
 };
 
+pub const DISPATCHER_COUNT: WorkerCount = WorkerCount {
+    one: 1,
+    some: 4,
+    all: 16,
+};
+
 /// IPv4 adress used for tests
 pub const TEST_IPV4: Ipv4Addr = Ipv4Addr::LOCALHOST;
 

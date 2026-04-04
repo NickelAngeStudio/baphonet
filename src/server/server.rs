@@ -32,12 +32,12 @@ use crate::{
         ClientId, ServerStatus,
         channel::ServerChannel,
         client::{Clients, ServerClient},
+        dispatcher::Dispatcher,
         error::ErrorServer,
         message::{
             ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
             WorkerMessage,
         },
-        sender::ServerMessageSender,
         supervisor::Supervisor,
     },
 };
@@ -90,12 +90,12 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
         }
     }
 
-    /// Get a new [`ServerSender`] that can send message to clients.
+    /// Get a new [`Dispatcher`] that can send message to clients.
     ///
     /// This can be used to create a sender for each thread
     /// that can send a message to client.
-    pub fn sender(&mut self) -> ServerMessageSender<OUT> {
-        self.channels.sender_channel(self.status())
+    pub fn dispatcher(&mut self) -> Dispatcher<OUT> {
+        self.channels.dispatcher(self.status())
     }
 
     /// Returns current server status

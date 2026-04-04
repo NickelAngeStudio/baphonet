@@ -59,16 +59,16 @@ pub enum SupervisorUpdate {
     Ended,
 }
 
-/// Message sent to sender by server
+/// Message sent to dispatcher by server
 #[derive(Debug, Clone)]
-pub enum SenderMessage<OUT: Message + Send + 'static> {
+pub enum DispatcherMessage<OUT: Message + Send + 'static> {
     /// Server status changed.
     Status(ServerStatus),
 
     /// Get the newest reference of sender
     Reference(Sender<WorkerMessage<OUT>>),
 
-    /// Ping the [`ServerMessageSender`] to see if still alive
+    /// Ping the [`Dispatcher`] to see if still alive
     Ping,
 }
 

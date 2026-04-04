@@ -32,8 +32,10 @@ use crate::{
     Message,
     client::{
         ErrorClient,
-        channel::{ClientChannel, create_client_worker_channels},
-        message::{ClientMessage, WorkerMessage},
+        channel::ClientChannel,
+        dispatcher::Dispatcher,
+        error::ErrorWorker,
+        message::{ClientMessage, DispatcherMessage, WorkerMessage},
         status::{ClientStatus, WorkerStatus},
         worker::Worker,
     },
@@ -45,7 +47,7 @@ const MS_JOIN_WAIT_FOR_WORKER: u64 = 100;
 /// Client that connect to a Server
 pub struct Client<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Thread communication channels
-    pub(super) channels: Option<ClientChannel<IN, OUT>>,
+    pub(super) channels: ClientChannel<IN, OUT>,
 
     /// Handle of the worker thread
     pub(super) worker_handle: Option<JoinHandle<()>>,
@@ -74,8 +76,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
         match self.status {
             ClientStatus::Disconnected => {
                 // Create channels
-                let (client_channels, worker_channels) = create_client_worker_channels::<IN, OUT>();
-
+                let worker_channels = self.channels.worker_channels();
                 match Worker::new(
                     addr,
                     self.outgoing_max_size,
@@ -83,8 +84,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
                     worker_channels,
                 ) {
                     Ok(mut worker) => {
-                        self.channels = Some(client_channels);
-                        self.status = ClientStatus::Connecting;
+                        self.change_status(ClientStatus::Connecting);
                         self.worker_handle = Some(std::thread::spawn(move || {
                             worker.execute();
                         }));
@@ -105,16 +105,20 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
     ///     - Some([`ClientMessage`]) if message found.
     ///     - None if no message found.
     pub fn message(&mut self) -> Option<ClientMessage<IN>> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.rcv_client.try_recv() {
+        match self.channels.rcv_client.as_mut() {
+            Some(channel) => match channel.try_recv() {
                 Ok(message) => {
                     match &message {
                         ClientMessage::StatusChanged(worker_status) => match worker_status {
-                            WorkerStatus::Active => self.status = ClientStatus::Connected,
+                            WorkerStatus::Active => self.change_status(ClientStatus::Connected),
                             WorkerStatus::Ended => {
-                                if self.channels.is_some() {
-                                    self.close().unwrap(); // Close connection since error occurred for worker to ended before close().
+                                match self.close() {
+                                    // Close connection since error occurred for worker to ended before close().
+                                    Ok(_) => {}
+                                    Err(_) => {}
                                 }
+                                // Tell connection is lost
+                                return Some(ClientMessage::Error(ErrorWorker::ConnectionLost));
                             }
                             _ => {}
                         },
@@ -128,21 +132,12 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
         }
     }
 
-    /// Send outgoing message to server.
+    /// Get a new [`Dispatcher`] that can send message to server.
     ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if message was sent.
-    ///     - Err([`ErrorClient::Disconnected`]) if client is not connected.
-    ///     - Err([`ErrorClient::UnexpectedError`]) if channel was lost or unable to contact worker.
-    pub fn send(&mut self, message: OUT) -> Result<(), ErrorClient> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.sdr_worker.send(WorkerMessage::Send(message)) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(ErrorClient::UnexpectedError),
-            },
-            None => Err(ErrorClient::Disconnected),
-        }
+    /// This can be used to create a dispatcher for each thread
+    /// that can send a message to server.
+    pub fn dispatcher(&mut self) -> Dispatcher<OUT> {
+        self.channels.dispatcher(self.status())
     }
 
     /// Close the connection to the server and join worker thread.
@@ -156,10 +151,10 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
     ///     - Err([`ErrorClient::ClientCloseUnexpectedError`]) if thread join resulted in error.
     ///     - Err([`ErrorClient::ClientCloseTimeout`]) if unexpected error happened.
     pub fn close(&mut self) -> Result<(), ErrorClient> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.sdr_worker.send(WorkerMessage::Stop) {
+        match self.channels.sdr_worker.as_mut() {
+            Some(channel) => match channel.send(WorkerMessage::Stop) {
                 _ => {
-                    self.status = ClientStatus::Disconnecting;
+                    self.change_status(ClientStatus::Disconnecting);
                     self.join_thread_timeout()
                 }
             },
@@ -170,6 +165,15 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
     /// Get status of the client
     pub fn status(&self) -> ClientStatus {
         self.status
+    }
+
+    /// Change status of the client
+    #[inline]
+    fn change_status(&mut self, status: ClientStatus) {
+        self.status = status;
+        // Notify dispatchers
+        self.channels
+            .send_message_to_dispatchers(DispatcherMessage::Status(status));
     }
 
     /// Shutdown worker threads
@@ -211,8 +215,8 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
         }
 
         // Remove channels
-        self.channels = None;
-        self.status = ClientStatus::Disconnected;
+        self.channels.clear();
+        self.change_status(ClientStatus::Disconnected);
         Ok(())
     }
 }
@@ -221,7 +225,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
 #[cfg(debug_assertions)]
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Drop for Client<IN, OUT> {
     fn drop(&mut self) {
-        match self.channels.as_mut() {
+        match self.channels.sdr_worker.as_mut() {
             Some(_) => eprintln!("Client::close() should be called before program end!"),
             None => {}
         }

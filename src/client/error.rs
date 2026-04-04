@@ -64,6 +64,17 @@ pub enum ErrorClient {
     /// Client took too much time closing connection.
     CloseTimeout,
 }
+
+/// Error given by the [`Dispatcher`].
+#[derive(Debug, PartialEq, Clone)]
+pub enum ErrorDispatcher {
+    /// Client isn't connected to the server.
+    Disconnected,
+
+    /// Dispatcher is disconnected from the client.
+    ChannelDisconnected,
+}
+
 /// Possible [`Worker`](super::Worker) error
 #[derive(Debug, PartialEq)]
 pub enum ErrorWorker {

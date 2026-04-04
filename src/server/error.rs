@@ -76,17 +76,17 @@ pub enum ErrorServer {
     UnhandledIOError(std::io::ErrorKind),
 }
 
-/// Error given by the [`ServerMessageSender`].
+/// Error given by the [`Dispatcher`].
 #[derive(Debug, PartialEq, Clone)]
-pub enum ErrorSender {
+pub enum ErrorDispatcher {
     /// Server is inactive
     Inactive,
 
     /// Sender is currently paused
     Paused,
 
-    /// Sender is disconnected from the server (server dropped).
-    Disconnected,
+    /// Sender channel is disconnected from the server (server dropped).
+    ChannelDisconnected,
 
     /// Message has no destinations when using [`send_vec`].
     NoDestination,

@@ -44,7 +44,7 @@ pub mod status;
 
 #[doc(hidden)]
 pub mod channel;
-mod sender;
+mod dispatcher;
 
 pub use builder::ServerBuilder;
 pub use server::Server;

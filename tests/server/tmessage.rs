@@ -240,7 +240,10 @@ fn server_message_some_incoming_client(worker_count: usize, client_count: usize)
 
     for _ in 0..MESSAGE_PER_CLIENT {
         for client in &mut clients {
-            client.send(ClientToServerMessage::control()).unwrap()
+            client
+                .dispatcher()
+                .send(ClientToServerMessage::control())
+                .unwrap()
         }
     }
 

@@ -20,13 +20,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use std::sync::mpsc::Sender;
+
 use crate::{
     Message,
-    client::{error::ErrorWorker, status::WorkerStatus},
+    client::{
+        error::ErrorWorker,
+        status::{ClientStatus, WorkerStatus},
+    },
 };
 
 /// Message sent to client from worker
-pub enum ClientMessage<IN: Message + Send + 'static> {
+pub enum ClientMessage<IN: Message + Send> {
     /// Incoming message from server
     Incoming(IN),
 
@@ -37,8 +42,21 @@ pub enum ClientMessage<IN: Message + Send + 'static> {
     StatusChanged(WorkerStatus),
 }
 
+/// Message sent to dispatcher by client
+#[derive(Debug, Clone)]
+pub enum DispatcherMessage<OUT: Message + Send> {
+    /// Server status changed.
+    Status(ClientStatus),
+
+    /// Get the newest reference of sender
+    Reference(Sender<WorkerMessage<OUT>>),
+
+    /// Ping the [`Dispatcher`] to see if still alive
+    Ping,
+}
+
 /// Message sent to worker from client
-pub enum WorkerMessage<OUT: Message + Send + 'static> {
+pub enum WorkerMessage<OUT: Message + Send> {
     /// Send a message to the server
     Send(OUT),
 

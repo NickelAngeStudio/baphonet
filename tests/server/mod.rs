@@ -38,7 +38,7 @@ mod tmessage;
 mod tclose;
 
 /// Tests for Server::send()
-mod tsender;
+mod tdispatcher;
 
 /// Tests for Server::pause()
 mod tpause;

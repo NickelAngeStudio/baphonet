@@ -25,6 +25,8 @@ SOFTWARE.
 #[doc(hidden)]
 pub mod client;
 
+pub mod dispatcher;
+
 pub mod builder;
 
 pub mod status;

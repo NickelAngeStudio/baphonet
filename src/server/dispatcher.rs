@@ -26,16 +26,16 @@ use crate::{
     Message,
     server::{
         ClientId, ServerStatus,
-        error::ErrorSender,
-        message::{OutgoingMessage, SenderMessage, WorkerMessage},
+        error::ErrorDispatcher,
+        message::{DispatcherMessage, OutgoingMessage, WorkerMessage},
     },
 };
 
-/// Server sender can send message to client
+/// The server dispatcher can send message to client
 /// and can be shared to multiple threads.
-pub struct ServerMessageSender<OUT: Message + Send + 'static> {
+pub struct Dispatcher<OUT: Message + Send + 'static> {
     /// Unique receiver channel for sender
-    rcv_sender: Receiver<SenderMessage<OUT>>,
+    rcv_dispatcher: Receiver<DispatcherMessage<OUT>>,
 
     /// Clone of Sender channel for worker message
     pub(crate) sdr_worker: Option<Sender<WorkerMessage<OUT>>>,
@@ -44,14 +44,14 @@ pub struct ServerMessageSender<OUT: Message + Send + 'static> {
     server_status: ServerStatus,
 }
 
-impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
-    /// Create a new instance pf ServerSender with a message receiver.
+impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
+    /// Create a new instance of [`Dispatcher`] with a message receiver.
     pub(crate) fn new(
-        rcv_sender: Receiver<SenderMessage<OUT>>,
+        rcv_dispatcher: Receiver<DispatcherMessage<OUT>>,
         server_status: ServerStatus,
-    ) -> ServerMessageSender<OUT> {
-        ServerMessageSender {
-            rcv_sender,
+    ) -> Dispatcher<OUT> {
+        Dispatcher {
+            rcv_dispatcher: rcv_dispatcher,
             sdr_worker: None,
             server_status,
         }
@@ -65,7 +65,7 @@ impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
     ///     - Err([`ErrorSender::Inactive`]) if server hasn't started
     ///     - Err([`ErrorSender::Paused`]) if server is paused.
     ///     - Err([`ErrorSender::Disconnected`]) if server was dropped.
-    pub fn send(&mut self, client_id: ClientId, message: OUT) -> Result<(), ErrorSender> {
+    pub fn send(&mut self, client_id: ClientId, message: OUT) -> Result<(), ErrorDispatcher> {
         match self.update() {
             // Update sender
             Ok(_) => match self.server_status {
@@ -78,14 +78,14 @@ impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
                             Err(_) => {
                                 // Remove channel
                                 self.sdr_worker = None;
-                                Err(ErrorSender::Inactive)
+                                Err(ErrorDispatcher::Inactive)
                             }
                         }
                     }
-                    None => Err(ErrorSender::Inactive),
+                    None => Err(ErrorDispatcher::Inactive),
                 },
-                ServerStatus::Paused => Err(ErrorSender::Paused),
-                _ => Err(ErrorSender::Inactive),
+                ServerStatus::Paused => Err(ErrorDispatcher::Paused),
+                _ => Err(ErrorDispatcher::Inactive),
             },
             Err(err) => Err(err),
         }
@@ -104,7 +104,7 @@ impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
         &mut self,
         destinations: &Vec<ClientId>,
         message: OUT,
-    ) -> Result<(), ErrorSender> {
+    ) -> Result<(), ErrorDispatcher> {
         match self.update() {
             // Update sender
             Ok(_) => match self.server_status {
@@ -118,34 +118,34 @@ impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
                                 Err(_) => {
                                     // Remove channel
                                     self.sdr_worker = None;
-                                    Err(ErrorSender::Inactive)
+                                    Err(ErrorDispatcher::Inactive)
                                 }
                             }
                         } else {
-                            Err(ErrorSender::NoDestination)
+                            Err(ErrorDispatcher::NoDestination)
                         }
                     }
-                    None => Err(ErrorSender::Inactive),
+                    None => Err(ErrorDispatcher::Inactive),
                 },
-                ServerStatus::Paused => Err(ErrorSender::Paused),
-                _ => Err(ErrorSender::Inactive),
+                ServerStatus::Paused => Err(ErrorDispatcher::Paused),
+                _ => Err(ErrorDispatcher::Inactive),
             },
             Err(err) => Err(err),
         }
     }
 
-    /// Receive message from server to update sender.
+    /// Receive message from server to update dispatcher.
     ///
     /// # Returns
     /// - [`Result`]
     ///     - Ok(()) if updated with success.
     ///     - Err([`ErrorSender::Disconnected`]) if server was dropped.
     #[inline]
-    fn update(&mut self) -> Result<(), ErrorSender> {
+    fn update(&mut self) -> Result<(), ErrorDispatcher> {
         'update: loop {
-            match self.rcv_sender.try_recv() {
+            match self.rcv_dispatcher.try_recv() {
                 Ok(message) => match message {
-                    SenderMessage::Status(server_status) => {
+                    DispatcherMessage::Status(server_status) => {
                         match server_status {
                             // Remove sender if inactive
                             ServerStatus::Inactive | ServerStatus::Ending => self.sdr_worker = None,
@@ -153,17 +153,27 @@ impl<OUT: Message + Send + 'static> ServerMessageSender<OUT> {
                         }
                         self.server_status = server_status
                     }
-                    SenderMessage::Reference(sender) => self.sdr_worker = Some(sender),
+                    DispatcherMessage::Reference(sender) => self.sdr_worker = Some(sender),
                     _ => {}
                 },
                 Err(err) => match err {
                     TryRecvError::Empty => break 'update,
-                    TryRecvError::Disconnected => return Err(ErrorSender::Disconnected),
+                    TryRecvError::Disconnected => return Err(ErrorDispatcher::ChannelDisconnected),
                 },
             }
         }
 
         Ok(())
+    }
+
+    /// Returns the status of the dispatcher.
+    pub fn status(&mut self) -> ServerStatus {
+        match self.update() {
+            Ok(_) => {}
+            Err(_) => {}
+        }
+
+        self.server_status
     }
 }
 
@@ -179,9 +189,9 @@ mod tests {
         Message,
         server::{
             ClientId, ServerStatus,
-            error::ErrorSender,
-            message::{SenderMessage, WorkerMessage},
-            sender::ServerMessageSender,
+            dispatcher::Dispatcher,
+            error::ErrorDispatcher,
+            message::{DispatcherMessage, WorkerMessage},
         },
     };
 
@@ -201,21 +211,19 @@ mod tests {
     }
 
     fn create_sms() -> (
-        Sender<SenderMessage<TestMessage>>,
-        ServerMessageSender<TestMessage>,
+        Sender<DispatcherMessage<TestMessage>>,
+        Dispatcher<TestMessage>,
     ) {
-        let (sdr_sender, rcv_sender) = mpsc::channel::<SenderMessage<TestMessage>>();
+        let (sdr_sender, rcv_dispatcher) = mpsc::channel::<DispatcherMessage<TestMessage>>();
 
-        let sms = ServerMessageSender::<TestMessage>::new(
-            rcv_sender,
-            crate::server::ServerStatus::Inactive,
-        );
+        let sms =
+            Dispatcher::<TestMessage>::new(rcv_dispatcher, crate::server::ServerStatus::Inactive);
 
         (sdr_sender, sms)
     }
 
     #[test]
-    fn server_sender_new() {
+    fn dispatcher_new() {
         let (_sdr_sender, sms) = create_sms();
         assert_eq!(sms.server_status, ServerStatus::Inactive);
         assert!(sms.sdr_worker.is_none());
@@ -223,11 +231,11 @@ mod tests {
 
     /// Update and assert new status
     fn update_assert_status(
-        sdr: &mut Sender<SenderMessage<TestMessage>>,
-        sms: &mut ServerMessageSender<TestMessage>,
+        sdr: &mut Sender<DispatcherMessage<TestMessage>>,
+        sms: &mut Dispatcher<TestMessage>,
         status: ServerStatus,
     ) {
-        sdr.send(SenderMessage::Status(status)).unwrap();
+        sdr.send(DispatcherMessage::Status(status)).unwrap();
 
         // Wait for message
         thread::sleep(Duration::from_millis(10));
@@ -237,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_update_status() {
+    fn dispatcher_update_status() {
         let (mut sdr_sender, mut sms) = create_sms();
         update_assert_status(&mut sdr_sender, &mut sms, ServerStatus::Active);
         update_assert_status(&mut sdr_sender, &mut sms, ServerStatus::Ending);
@@ -247,12 +255,12 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_update_reference() {
+    fn dispatcher_update_reference() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
 
         // Wait for message
@@ -263,9 +271,9 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_update_ping() {
+    fn dispatcher_update_ping() {
         let (sdr_sender, mut sms) = create_sms();
-        sdr_sender.send(SenderMessage::Ping).unwrap();
+        sdr_sender.send(DispatcherMessage::Ping).unwrap();
 
         // Wait for message
         thread::sleep(Duration::from_millis(10));
@@ -273,15 +281,15 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_send_ok() {
+    fn dispatcher_send_ok() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
         sdr_sender
-            .send(SenderMessage::Status(ServerStatus::Active))
+            .send(DispatcherMessage::Status(ServerStatus::Active))
             .unwrap();
 
         thread::sleep(Duration::from_millis(10)); // Wait for message
@@ -301,15 +309,15 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_send_vec_ok() {
+    fn dispatcher_send_vec_ok() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
         sdr_sender
-            .send(SenderMessage::Status(ServerStatus::Active))
+            .send(DispatcherMessage::Status(ServerStatus::Active))
             .unwrap();
 
         thread::sleep(Duration::from_millis(10)); // Wait for message
@@ -331,83 +339,83 @@ mod tests {
     }
 
     #[test]
-    fn server_sender_send_error_inactive() {
+    fn dispatcher_send_error_inactive() {
         let (_sdr_sender, mut sms) = create_sms();
 
         match sms.send(0, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Inactive),
+            Err(err) => assert_eq!(err, ErrorDispatcher::Inactive),
         }
     }
 
     #[test]
-    fn server_sender_send_error_paused() {
+    fn dispatcher_send_error_paused() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
         sdr_sender
-            .send(SenderMessage::Status(ServerStatus::Paused))
+            .send(DispatcherMessage::Status(ServerStatus::Paused))
             .unwrap();
 
         thread::sleep(Duration::from_millis(10)); // Wait for message
 
         match sms.send(0, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Paused),
+            Err(err) => assert_eq!(err, ErrorDispatcher::Paused),
         }
     }
 
     #[test]
-    fn server_sender_send_error_disconnected() {
-        let mut _sms: Option<ServerMessageSender<TestMessage>> = None;
+    fn dispatcher_send_error_disconnected() {
+        let mut _sms: Option<Dispatcher<TestMessage>> = None;
 
         {
-            let (sdr_sender, rcv_sender) = mpsc::channel::<SenderMessage<TestMessage>>();
+            let (sdr_sender, rcv_dispatcher) = mpsc::channel::<DispatcherMessage<TestMessage>>();
             let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
-            _sms = Some(ServerMessageSender::<TestMessage>::new(
-                rcv_sender,
+            _sms = Some(Dispatcher::<TestMessage>::new(
+                rcv_dispatcher,
                 crate::server::ServerStatus::Inactive,
             ));
 
             sdr_sender
-                .send(SenderMessage::Reference(sdr_worker))
+                .send(DispatcherMessage::Reference(sdr_worker))
                 .unwrap();
             sdr_sender
-                .send(SenderMessage::Status(ServerStatus::Active))
+                .send(DispatcherMessage::Status(ServerStatus::Active))
                 .unwrap();
         } // This will drop the sdr_sender
 
         match _sms.unwrap().send(0, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Disconnected),
+            Err(err) => assert_eq!(err, ErrorDispatcher::ChannelDisconnected),
         }
     }
 
     #[test]
-    fn server_sender_send_vec_error_inactive() {
+    fn dispatcher_send_vec_error_inactive() {
         let (_sdr_sender, mut sms) = create_sms();
 
         let destinations: Vec<ClientId> = vec![1, 2, 3, 4, 5, 6];
         match sms.send_vec(&destinations, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Inactive),
+            Err(err) => assert_eq!(err, ErrorDispatcher::Inactive),
         }
     }
 
     #[test]
-    fn server_sender_send_vec_error_paused() {
+    fn dispatcher_send_vec_error_paused() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
         sdr_sender
-            .send(SenderMessage::Status(ServerStatus::Paused))
+            .send(DispatcherMessage::Status(ServerStatus::Paused))
             .unwrap();
 
         thread::sleep(Duration::from_millis(10)); // Wait for message
@@ -415,48 +423,48 @@ mod tests {
         let destinations: Vec<ClientId> = vec![1, 2, 3, 4, 5, 6];
         match sms.send_vec(&destinations, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Paused),
+            Err(err) => assert_eq!(err, ErrorDispatcher::Paused),
         }
     }
 
     #[test]
-    fn server_sender_send_vec_error_disconnected() {
-        let mut _sms: Option<ServerMessageSender<TestMessage>> = None;
+    fn dispatcher_send_vec_error_disconnected() {
+        let mut _sms: Option<Dispatcher<TestMessage>> = None;
 
         {
-            let (sdr_sender, rcv_sender) = mpsc::channel::<SenderMessage<TestMessage>>();
+            let (sdr_sender, rcv_dispatcher) = mpsc::channel::<DispatcherMessage<TestMessage>>();
             let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
-            _sms = Some(ServerMessageSender::<TestMessage>::new(
-                rcv_sender,
+            _sms = Some(Dispatcher::<TestMessage>::new(
+                rcv_dispatcher,
                 crate::server::ServerStatus::Inactive,
             ));
 
             sdr_sender
-                .send(SenderMessage::Reference(sdr_worker))
+                .send(DispatcherMessage::Reference(sdr_worker))
                 .unwrap();
             sdr_sender
-                .send(SenderMessage::Status(ServerStatus::Active))
+                .send(DispatcherMessage::Status(ServerStatus::Active))
                 .unwrap();
         } // This will drop the sdr_sender
 
         let destinations: Vec<ClientId> = vec![1, 2, 3, 4, 5, 6];
         match _sms.unwrap().send_vec(&destinations, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::Disconnected),
+            Err(err) => assert_eq!(err, ErrorDispatcher::ChannelDisconnected),
         }
     }
 
     #[test]
-    fn server_sender_send_vec_error_no_destination() {
+    fn dispatcher_send_vec_error_no_destination() {
         let (sdr_sender, mut sms) = create_sms();
         let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerMessage<TestMessage>>();
 
         sdr_sender
-            .send(SenderMessage::Reference(sdr_worker))
+            .send(DispatcherMessage::Reference(sdr_worker))
             .unwrap();
         sdr_sender
-            .send(SenderMessage::Status(ServerStatus::Active))
+            .send(DispatcherMessage::Status(ServerStatus::Active))
             .unwrap();
 
         thread::sleep(Duration::from_millis(10)); // Wait for message
@@ -464,7 +472,7 @@ mod tests {
         let destinations: Vec<ClientId> = Vec::new();
         match sms.send_vec(&destinations, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorSender::NoDestination),
+            Err(err) => assert_eq!(err, ErrorDispatcher::NoDestination),
         }
     }
 }

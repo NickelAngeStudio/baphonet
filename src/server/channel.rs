@@ -22,8 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-/// Default capacity of the sender vec
-const SENDER_VEC_CAPACITY: usize = 16;
+/// Default capacity of the dispatcher vec
+const DISPATCHER_VEC_CAPACITY: usize = 16;
 
 use std::sync::{
     Arc, Mutex,
@@ -34,8 +34,8 @@ use crate::{
     Message,
     server::{
         ServerStatus,
-        message::{SenderMessage, ServerMessage, SupervisorMessage, WorkerMessage},
-        sender::ServerMessageSender,
+        dispatcher::Dispatcher,
+        message::{DispatcherMessage, ServerMessage, SupervisorMessage, WorkerMessage},
     },
 };
 
@@ -44,8 +44,8 @@ pub(super) struct ServerChannel<IN: Message + Send, OUT: Message + Send + 'stati
     /// Receive of server messages
     pub rcv_server: Option<Receiver<ServerMessage<IN>>>,
 
-    /// Channels of Server Sender
-    pub sdr_sender: Vec<Sender<SenderMessage<OUT>>>,
+    /// Channels of Server dispatcher
+    pub sdr_dispatcher: Vec<Sender<DispatcherMessage<OUT>>>,
 
     // Sender channel for supervisor messages
     pub sdr_supervisor: Option<Sender<SupervisorMessage>>,
@@ -59,28 +59,58 @@ impl<IN: Message + Send, OUT: Message + Send> ServerChannel<IN, OUT> {
     pub fn new() -> ServerChannel<IN, OUT> {
         ServerChannel {
             rcv_server: None,
-            sdr_sender: Vec::with_capacity(SENDER_VEC_CAPACITY),
+            sdr_dispatcher: Vec::with_capacity(DISPATCHER_VEC_CAPACITY),
             sdr_supervisor: None,
             sdr_worker: None,
         }
     }
 
-    /// Create and register a new [`ServerMessageSender`].
+    /// Create and register a new [`Dispatcher`].
     ///
     /// # Returns
-    /// A new [`ServerMessageSender`].
-    pub fn sender_channel(&mut self, server_status: ServerStatus) -> ServerMessageSender<OUT> {
-        let (sdr_sender, rcv_sender) = mpsc::channel::<SenderMessage<OUT>>();
+    /// A new [`Dispatcher`].
+    pub fn dispatcher(&mut self, server_status: ServerStatus) -> Dispatcher<OUT> {
+        let (sdr_dispatcher, rcv_dispatcher) = mpsc::channel::<DispatcherMessage<OUT>>();
 
-        let mut sms = ServerMessageSender::new(rcv_sender, server_status);
+        let mut sms = Dispatcher::new(rcv_dispatcher, server_status);
 
-        self.sdr_sender.push(sdr_sender); // Register sender
+        self.sdr_dispatcher.push(sdr_dispatcher); // Register sender
         match self.sdr_worker.as_ref() {
             Some(sender) => sms.sdr_worker = Some(sender.clone()),
             None => {}
         }
 
         sms
+    }
+
+    /// Send a [`DispatcherMessage`] to dispatchers
+    pub fn send_message_to_dispatcher(&mut self, message: DispatcherMessage<OUT>) {
+        match message {
+            DispatcherMessage::Status(server_status) => {
+                for sdr in &self.sdr_dispatcher {
+                    match sdr.send(DispatcherMessage::Status(server_status.clone())) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                }
+            }
+            DispatcherMessage::Reference(sender) => {
+                for sdr in &self.sdr_dispatcher {
+                    match sdr.send(DispatcherMessage::Reference(sender.clone())) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                }
+            }
+            DispatcherMessage::Ping => {
+                for sdr in &self.sdr_dispatcher {
+                    match sdr.send(DispatcherMessage::Ping) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                }
+            }
+        }
     }
 
     /// Create communication channels of supervisor
@@ -108,17 +138,17 @@ impl<IN: Message + Send, OUT: Message + Send> ServerChannel<IN, OUT> {
         )
     }
 
-    /// Clear all channels except for active [`ServerMessageSender`]
+    /// Clear all channels except for active [`Dispatcher`]
     pub fn clear(&mut self) {
         self.rcv_server = None;
         self.sdr_supervisor = None;
         self.sdr_worker = None;
 
-        for i in self.sdr_sender.len()..0 {
-            match self.sdr_sender[i].send(SenderMessage::Ping) {
+        for i in self.sdr_dispatcher.len()..0 {
+            match self.sdr_dispatcher[i].send(DispatcherMessage::Ping) {
                 Ok(_) => {}
                 Err(_) => {
-                    self.sdr_sender.swap_remove(i);
+                    self.sdr_dispatcher.swap_remove(i);
                 }
             }
         }

@@ -27,7 +27,7 @@ use crate::{
     client::{
         Client, DEFAULT_OUTGOING_SIZE, DEFAULT_POOL_RATE_PER_SECOND, ErrorClient,
         MAXIMUM_OUTGOING_SIZE, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_OUTGOING_SIZE,
-        MINIMUM_POOL_RATE_PER_SECOND, status::ClientStatus,
+        MINIMUM_POOL_RATE_PER_SECOND, channel::ClientChannel, status::ClientStatus,
     },
 };
 
@@ -95,7 +95,7 @@ impl ClientBuilder {
         }
 
         Ok(Client {
-            channels: None,
+            channels: ClientChannel::new(),
             worker_handle: None,
             status: ClientStatus::Disconnected,
             pool_rate: self.pool_rate,

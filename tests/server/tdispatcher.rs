@@ -20,80 +20,140 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use baphonet::server::{ServerBuilder, error::ErrorSender};
+use baphonet::server::{ServerBuilder, error::ErrorDispatcher};
 
 use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
 #[test]
-fn server_sender_create_inactive() {
+fn dispatcher_create_inactive() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()
         .unwrap();
 
-    let mut sender = server.sender();
+    let mut sender = server.dispatcher();
 
     match sender.send(0, ServerToClientMessage::control()) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorSender::Inactive),
+        Err(err) => assert_eq!(err, ErrorDispatcher::Inactive),
     }
 }
 
 #[test]
-fn server_sender_create_paused() {
+fn dispatcher_create_paused() {
     todo!()
 }
 
 #[test]
-fn server_sender_stop_start_server() {
+fn dispatcher_stop_start_server() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_one() {
+fn dispatcher_send_one_dispatcher_one() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_some() {
+fn dispatcher_send_one_dispatcher_some() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_all() {
+fn dispatcher_send_one_dispatcher_all() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_vec_one() {
+fn dispatcher_send_some_dispatcher_one() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_vec_some() {
+fn dispatcher_send_some_dispatcher_some() {
     todo!()
 }
 
 #[test]
-fn server_sender_send_vec_all() {
+fn dispatcher_send_some_dispatcher_all() {
     todo!()
 }
 
 #[test]
-fn server_sender_error_inactive() {
+fn dispatcher_send_all_dispatcher_one() {
     todo!()
 }
 
 #[test]
-fn server_sender_error_paused() {
+fn dispatcher_send_all_dispatcher_some() {
     todo!()
 }
 
 #[test]
-fn server_sender_error_disconnected() {
+fn dispatcher_send_all_dispatcher_all() {
     todo!()
 }
 
 #[test]
-fn server_sender_error_no_destination() {
+fn dispatcher_send_vec_one_dispatcher_one() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_one_dispatcher_some() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_one_dispatcher_all() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_some_dispatcher_one() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_some_dispatcher_some() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_some_dispatcher_all() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_all_dispatcher_one() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_all_dispatcher_some() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_send_vec_all_dispatcher_all() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_error_inactive() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_error_paused() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_error_disconnected() {
+    todo!()
+}
+
+#[test]
+fn dispatcher_error_no_destination() {
     todo!()
 }

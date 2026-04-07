@@ -23,7 +23,6 @@ SOFTWARE.
 */
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::thread::Thread;
 use std::time::Duration;
 
 use baphonet::Message;

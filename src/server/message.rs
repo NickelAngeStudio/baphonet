@@ -20,11 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::mpsc::Sender;
+use std::{
+    net::TcpListener,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     Message,
-    server::{ClientId, ServerStatus, error::ErrorUpdate, worker::WorkerId},
+    server::{ClientId, error::ErrorUpdate, worker::WorkerId},
 };
 
 /// Message and updates sent to and received by server
@@ -55,25 +58,15 @@ pub enum SupervisorUpdate {
     /// Server is currently full
     Full,
 
+    /// Server is currently inactive
+    Inactive,
+
     /// Supervisor has ended
     Ended,
 }
 
-/// Message sent to dispatcher by server
-#[derive(Debug, Clone)]
-pub enum DispatcherMessage<OUT: Message + Send + 'static> {
-    /// Server status changed.
-    Status(ServerStatus),
-
-    /// Get the newest reference of sender
-    Reference(Sender<WorkerMessage<OUT>>),
-
-    /// Ping the [`Dispatcher`] to see if still alive
-    Ping,
-}
-
 /// Message sent to and received by supervisor
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SupervisorMessage {
     /// Message sent from server
     FromServer(SupervisorServerMessage),
@@ -83,16 +76,16 @@ pub enum SupervisorMessage {
 }
 
 /// Supervisor message sent from server
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SupervisorServerMessage {
-    /// Pause the supervisor
-    Pause,
+    /// Give listener to supervisor
+    Start(Arc<Mutex<TcpListener>>),
 
-    /// Resume the supervisor
-    Resume,
-
-    /// Stop the supervisor, ending threads
+    /// Stop the supervisor
     Stop,
+
+    /// Drop the supervisor thread
+    End,
 }
 
 /// Supervisor message sent from worker
@@ -117,9 +110,21 @@ pub enum SupervisorWorkerMessage {
     Finished(WorkerId),
 }
 
-/// Message sent to and received by worker
+/// Message sent to inactive worker
+pub enum WorkerInactiveMessage {
+    /// Start the worker
+    Start(Arc<Mutex<TcpListener>>),
+
+    /// Stop the worker, ending the thread
+    Stop,
+
+    /// Drop the worker thread
+    End,
+}
+
+/// Message sent to and received by active worker
 #[derive(Debug, Clone)]
-pub enum WorkerMessage<OUT: Message + Send> {
+pub enum WorkerActiveMessage<OUT: Message + Send> {
     /// Handle incoming connection to server
     Incoming,
 
@@ -129,11 +134,11 @@ pub enum WorkerMessage<OUT: Message + Send> {
     /// Send server message to clients
     Send(OutgoingMessage<OUT>),
 
-    /// Cleat a client stream buffer
-    Clear(ClientId),
-
     /// Disconnect client
     Disconnect(ClientId),
+
+    /// Stop Client thread (set inactive)
+    Stop,
 
     /// End client thread
     End,

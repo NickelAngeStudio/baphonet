@@ -39,6 +39,3 @@ mod tclose;
 
 /// Tests for Server::send()
 mod tdispatcher;
-
-/// Tests for Server::pause()
-mod tpause;

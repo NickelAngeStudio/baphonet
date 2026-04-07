@@ -26,16 +26,7 @@ use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
 #[test]
 fn dispatcher_create_inactive() {
-    let mut server = ServerBuilder::new()
-        .build::<ClientToServerMessage, ServerToClientMessage>()
-        .unwrap();
-
-    let mut sender = server.dispatcher();
-
-    match sender.send(0, ServerToClientMessage::control()) {
-        Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorDispatcher::Inactive),
-    }
+    todo!()
 }
 
 #[test]

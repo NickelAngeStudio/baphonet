@@ -21,7 +21,8 @@
 // SOFTWARE.
 
 use std::{
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener},
+    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -29,14 +30,14 @@ use std::{
 use crate::{
     Message,
     server::{
-        ClientId, ServerStatus,
+        ClientId, ServerBuilder, Status,
         channel::ServerChannel,
-        client::{Clients, ServerClient},
+        client::{Client, Clients, ServerClient},
         dispatcher::Dispatcher,
         error::ErrorServer,
         message::{
             ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
-            WorkerMessage,
+            WorkerActiveMessage,
         },
         supervisor::Supervisor,
     },
@@ -47,17 +48,8 @@ const MS_JOIN_WAIT_DURATION_PER_WORKER: u64 = 50;
 
 /// Server end of baphonet
 pub struct Server<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
-    /// Maximum client connection allowed
-    pub(super) maximum_client: usize,
-
     /// Count of worker threads allowed
     pub(super) worker_count: usize,
-
-    /// Pool rate of the server
-    pub(super) pool_rate: u64,
-
-    /// Maximum size of incoming message
-    pub(super) incoming_max_size: usize,
 
     /// Communication channels between threads
     pub(super) channels: ServerChannel<IN, OUT>,
@@ -66,13 +58,48 @@ pub struct Server<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     pub(super) clients: Clients,
 
     /// Current status of the server
-    pub(super) status: ServerStatus,
+    pub(super) status: Status,
 
     /// Supervisor thread handle
     pub(super) supervisor_handle: Option<JoinHandle<()>>,
 }
 
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT> {
+    /// Create a new server from builder.
+    pub(crate) fn build(builder: &ServerBuilder) -> Server<IN, OUT> {
+        // Create shared client list
+        let mut clients = Vec::<Mutex<Option<Client>>>::with_capacity(builder.maximum_client);
+        clients.resize_with(builder.maximum_client, || Mutex::new(None));
+        let clients = Arc::new(clients);
+
+        // Channels
+        let (server_channels, supervisor_channels) =
+            ServerChannel::create_server_supervisor_channels();
+
+        // Create supervisor
+        let mut supervisor = Supervisor::<IN, OUT>::new(
+            builder.maximum_client,
+            builder.worker_count,
+            builder.incoming_max_size,
+            builder.pool_rate,
+            clients.clone(),
+            supervisor_channels,
+        );
+
+        let supervisor_handle = Some(thread::spawn(move || {
+            supervisor.execute();
+        }));
+
+        // Return new created server
+        Server {
+            worker_count: builder.worker_count,
+            channels: server_channels,
+            clients: clients,
+            status: super::Status::Inactive,
+            supervisor_handle,
+        }
+    }
+
     /// Start the server at specified socketr address.
     ///
     /// # Returns
@@ -85,21 +112,58 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Err([`Error::UnhandledIOError`]) if any unexpecxted IO error occurred
     pub fn start(&mut self, socket: SocketAddr) -> Result<(), ErrorServer> {
         match self.status {
-            ServerStatus::Inactive => self.create_supervisor(socket),
+            Status::Inactive => {
+                // Create listener
+                match Self::create_tcp_listener(socket) {
+                    Ok(listener) => {
+                        // Start supervisor
+                        let listener = Arc::new(Mutex::new(listener));
+                        match self
+                            .channels
+                            .sdr_supervisor
+                            .send(SupervisorMessage::FromServer(
+                                SupervisorServerMessage::Start(listener),
+                            )) {
+                            Ok(_) => {
+                                self.status = Status::Starting;
+                                Ok(())
+                            }
+                            Err(_) => Err(ErrorServer::UnexpectedError),
+                        }
+                    }
+                    Err(err) => Err(err),
+                }
+            }
             _ => Err(ErrorServer::AlreadyActive),
         }
     }
 
-    /// Get a new [`Dispatcher`] that can send message to clients.
+    /// Create the TcpListener from [`SocketAddr`].
+    #[inline]
+    fn create_tcp_listener(socket: SocketAddr) -> Result<TcpListener, ErrorServer> {
+        match TcpListener::bind(socket) {
+            Ok(listener) => {
+                // This should crash instead of having a blocking listener
+                listener.set_nonblocking(true).unwrap();
+                Ok(listener)
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::AddrInUse => Err(ErrorServer::SocketAddressAlreadyUsed),
+                std::io::ErrorKind::InvalidInput => Err(ErrorServer::SocketInvalid),
+                _ => Err(ErrorServer::UnhandledIOError(err.kind())),
+            },
+        }
+    }
+
+    /// Get the [`Dispatcher`] that can send message to clients.
     ///
-    /// This can be used to create a sender for each thread
-    /// that can send a message to client.
-    pub fn dispatcher(&mut self) -> Dispatcher<OUT> {
-        self.channels.dispatcher(self.status())
+    /// The dispatcher can be cloned and shared with other thread.
+    pub fn dispatcher(&mut self) -> &Dispatcher<OUT> {
+        &self.channels.dispatcher
     }
 
     /// Returns current server status
-    pub fn status(&self) -> ServerStatus {
+    pub fn status(&self) -> Status {
         self.status
     }
 
@@ -110,21 +174,22 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Some([`ServerMessage`]) if message found.
     ///     - None if no message found.
     pub fn message(&mut self) -> Option<ServerMessage<IN>> {
-        match self.channels.rcv_server.as_mut() {
-            Some(channel) => match channel.try_recv() {
-                Ok(message) => match &message {
-                    ServerMessage::Update(supervisor_update) => match supervisor_update {
-                        SupervisorUpdate::Active => {
-                            self.status = ServerStatus::Active;
-                            Some(message)
-                        }
-                        _ => Some(message),
-                    },
+        match self.channels.rcv_server.try_recv() {
+            Ok(message) => match &message {
+                ServerMessage::Update(supervisor_update) => match supervisor_update {
+                    SupervisorUpdate::Active => {
+                        self.status = Status::Active;
+                        Some(message)
+                    }
+                    SupervisorUpdate::Inactive => {
+                        self.status = Status::Inactive;
+                        Some(message)
+                    }
                     _ => Some(message),
                 },
-                Err(_) => None,
+                _ => Some(message),
             },
-            None => None,
+            Err(_) => None,
         }
     }
 
@@ -147,37 +212,17 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Err([`ErrorServer::ServerInactive`]) if server hasn't started
     ///     - Err([`ErrorServer::UnexpectedError`]) if unexpected error happened.
     pub fn close_connection(&mut self, client_id: ClientId) -> Result<(), ErrorServer> {
-        match self.channels.sdr_worker.as_mut() {
-            Some(channel) => match channel.send(WorkerMessage::Disconnect(client_id)) {
+        match self.status {
+            Status::Active => match self
+                .channels
+                .sdr_worker
+                .send(WorkerActiveMessage::Disconnect(client_id))
+            {
                 Ok(_) => Ok(()),
                 Err(_) => Err(ErrorServer::UnexpectedError),
             },
-            None => Err(ErrorServer::Inactive),
+            _ => Err(ErrorServer::Inactive),
         }
-    }
-
-    /// Pause the server. Message are ignored but connections are maintained.
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if pause was sent to thread.
-    ///     - Err([`Error::ServerInactive`]) if server hasn't started
-    ///     - Err([`Error::ServerPaused`]) if server is already paused.
-    ///     - Err([`Error::Unexpected`]) if unexpected error happened.
-    pub fn pause(&mut self) -> Result<(), ErrorServer> {
-        todo!()
-    }
-
-    /// Resume the server if paused.
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if resume was sent to thread.
-    ///     - Err([`Error::ServerInactive`]) if server hasn't started
-    ///     - Err([`Error::ServerActive`]) if server is already active.
-    ///     - Err([`Error::Unexpected`]) if unexpected error happened.
-    pub fn resume(&mut self) -> Result<(), ErrorServer> {
-        todo!()
     }
 
     /// Stop the server, disconnecting all clients.
@@ -190,34 +235,36 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
     ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
     ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
     pub fn stop(&mut self) -> Result<(), ErrorServer> {
-        match self.channels.sdr_supervisor.as_mut() {
-            Some(channel) => {
-                match channel.send(SupervisorMessage::FromServer(SupervisorServerMessage::Stop)) {
-                    Ok(_) => {
-                        self.status = ServerStatus::Ending;
-                        self.join_threads_timeout()
-                    }
-                    Err(_) => todo!(), // TODO: Handle channel lost #13
-                }
+        match self
+            .channels
+            .sdr_supervisor
+            .send(SupervisorMessage::FromServer(SupervisorServerMessage::Stop))
+        {
+            Ok(_) => {
+                self.status = Status::Stopping;
+                Ok(())
+                //self.join_threads_timeout()
             }
-            None => Ok(()), // Server already stopped
+            Err(_) => todo!(), // TODO: Handle channel lost #13
         }
     }
 
-    /// Shutdown server threads
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if all threads joined.
-    ///     - Err([`ErrorServer::ServerStopTimeout`]) if server took too much time to join threads.
-    ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
-    ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
+    /// Join server threads with a maximum wait time.
     #[inline]
-    fn join_threads_timeout(&mut self) -> Result<(), ErrorServer> {
+    fn join_server_threads(&mut self) {
         let join_wait_duration = Duration::from_millis(
-            MS_JOIN_WAIT_DURATION_PER_WORKER * (1 + (self.maximum_client as u64)),
+            MS_JOIN_WAIT_DURATION_PER_WORKER * (1 + (self.worker_count as u64)),
         );
         let ts = Instant::now();
+
+        match self
+            .channels
+            .sdr_supervisor
+            .send(SupervisorMessage::FromServer(SupervisorServerMessage::End))
+        {
+            Ok(_) => {}
+            Err(_) => {}
+        }
 
         'join: loop {
             match self.supervisor_handle.as_ref() {
@@ -229,59 +276,38 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
                                 Ok(_) => {
                                     break 'join;
                                 }
-                                Err(_) => return Err(ErrorServer::StopJoinError),
+                                Err(_) => {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("join_server_threads : join() error!");
+                                }
                             },
-                            None => return Err(ErrorServer::UnexpectedError), // Should never happens
+                            None => {} // Should never happens
                         };
+                        break 'join;
                     }
                 }
-                None => return Err(ErrorServer::UnexpectedError), // Should never happens
+                None => break 'join, // Should never happens
             }
 
             if ts.elapsed() > join_wait_duration {
-                // Join took too long
-                return Err(ErrorServer::StopTimeout);
+                #[cfg(debug_assertions)]
+                eprintln!("join_server_threads : Timeout!");
+                break 'join;
             }
-        }
-
-        self.channels.clear(); // Clear channels
-        self.status = ServerStatus::Inactive;
-        Ok(())
-    }
-
-    /// Create the supervisor thread
-    #[inline]
-    fn create_supervisor(&mut self, socket: SocketAddr) -> Result<(), ErrorServer> {
-        match Supervisor::<IN, OUT>::new(
-            socket,
-            self.maximum_client,
-            self.worker_count,
-            self.incoming_max_size,
-            self.pool_rate,
-            self.clients.clone(),
-            self.channels.supervisor_channels(),
-        ) {
-            Ok(mut supervisor) => {
-                self.supervisor_handle = Some(thread::spawn(move || {
-                    supervisor.execute();
-                }));
-
-                self.status = ServerStatus::Starting;
-
-                Ok(())
-            }
-            Err(err) => Err(err),
         }
     }
 }
 
 /// Drop implemented only for Debug. Will warn of server not shutting down properly.
-#[cfg(debug_assertions)]
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Drop for Server<IN, OUT> {
     fn drop(&mut self) {
-        match self.channels.sdr_supervisor {
-            Some(_) => eprintln!("Server::stop() should be called before program end!"),
-            None => {}
+        match self.status {
+            Status::Inactive | Status::Stopping => {}
+            _ => {
+                #[cfg(debug_assertions)]
+                eprintln!("Server::stop() should be called before program end!")
+            }
         }
+        self.join_server_threads();
     }
 }

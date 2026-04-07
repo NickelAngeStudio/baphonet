@@ -20,31 +20,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::{Arc, Mutex};
-
 use crate::{
     Message,
     server::{
         DEFAULT_INCOMING_SIZE, DEFAULT_MAXIMUM_CLIENT, DEFAULT_POOL_RATE_PER_SECOND,
         DEFAULT_WORKER_COUNT, MAXIMUM_CLIENT, MAXIMUM_INCOMING_SIZE, MAXIMUM_POOL_RATE_PER_SECOND,
         MINIMUM_CLIENT, MINIMUM_INCOMING_SIZE, MINIMUM_POOL_RATE_PER_SECOND, MINIMUM_WORKER,
-        Server, channel::ServerChannel, client::Client, error::ErrorServer,
+        Server, error::ErrorServer,
     },
 };
 
 /// Builder helper used to create server.
 pub struct ServerBuilder {
     /// Maximum client connection allowed
-    maximum_client: usize,
+    pub(crate) maximum_client: usize,
 
     /// Count of worker threads allowed
-    worker_count: usize,
+    pub(crate) worker_count: usize,
 
     /// Pool rate of the server
-    pool_rate: u64,
+    pub(crate) pool_rate: u64,
 
     /// Maximum size of incoming message
-    incoming_max_size: usize,
+    pub(crate) incoming_max_size: usize,
 }
 
 impl ServerBuilder {
@@ -151,21 +149,7 @@ impl ServerBuilder {
             return Err(ErrorServer::IncomingMessageSizeAboveMaximum);
         }
 
-        // Create shared client list
-        let mut clients = Vec::<Mutex<Option<Client>>>::with_capacity(self.maximum_client);
-        clients.resize_with(self.maximum_client, || Mutex::new(None));
-
-        // Return new created server
-        Ok(Server {
-            maximum_client: self.maximum_client,
-            worker_count: self.worker_count,
-            pool_rate: self.pool_rate,
-            incoming_max_size: self.incoming_max_size,
-            channels: ServerChannel::new(),
-            clients: Arc::new(clients),
-            status: super::ServerStatus::Inactive,
-            supervisor_handle: None,
-        })
+        Ok(Server::<IN, OUT>::build(&self))
     }
 }
 
@@ -202,10 +186,7 @@ mod tests {
         server: &Server<IN, OUT>,
         builder: &ServerBuilder,
     ) {
-        assert_eq!(server.maximum_client, builder.maximum_client);
         assert_eq!(server.worker_count, builder.worker_count);
-        assert_eq!(server.pool_rate, builder.pool_rate);
-        assert_eq!(server.incoming_max_size, builder.incoming_max_size);
     }
 
     #[test]

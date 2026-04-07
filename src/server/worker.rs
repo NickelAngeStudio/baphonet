@@ -31,15 +31,14 @@ use std::{
 use crate::{
     MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE, client,
     server::{
-        ClientId,
+        ClientId, Status,
         channel::WorkerChannel,
         client::{Client, Clients},
         error::ErrorUpdate,
         message::{
             IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage,
-            SupervisorWorkerMessage, WorkerMessage,
+            SupervisorWorkerMessage, WorkerActiveMessage, WorkerInactiveMessage,
         },
-        status::WorkerStatus,
     },
 };
 
@@ -80,7 +79,7 @@ pub(crate) struct Worker<IN: Message + Send, OUT: Message + Send> {
     incoming_max_size: usize,
 
     /// Shared TCP listener
-    listener: Arc<Mutex<TcpListener>>,
+    listener: Option<Arc<Mutex<TcpListener>>>,
 
     /// Shared list of clients
     clients: Clients,
@@ -89,7 +88,7 @@ pub(crate) struct Worker<IN: Message + Send, OUT: Message + Send> {
     channels: WorkerChannel<IN, OUT>,
 
     /// Current status of worker
-    status: WorkerStatus,
+    status: Status,
 }
 
 impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
@@ -97,16 +96,15 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     pub fn new(
         worker_id: WorkerId,
         incoming_max_size: usize,
-        listener: Arc<Mutex<TcpListener>>,
         clients: Clients,
         channels: WorkerChannel<IN, OUT>,
     ) -> Worker<IN, OUT> {
         Worker {
             worker_id,
             incoming_max_size,
-            listener,
+            listener: None,
             clients,
-            status: WorkerStatus::Active,
+            status: Status::Inactive,
             channels,
         }
     }
@@ -117,14 +115,50 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
         let mut buffer = Vec::<u8>::with_capacity(MAXIMUM_MESSAGE_SIZE);
         buffer.resize(MAXIMUM_MESSAGE_SIZE, 0);
 
-        'worker: loop {
+        'inactive: loop {
             match self.status {
-                WorkerStatus::Active => self.handle_worker_routine(&mut buffer),
-                WorkerStatus::Ended => break 'worker,
+                Status::End => break 'inactive,
+                _ => {
+                    self.status = Status::Inactive;
+                    match self.channels.rcv_inactive.recv() {
+                        Ok(msg) => match msg {
+                            WorkerInactiveMessage::Start(listener) => {
+                                self.active(listener, &mut buffer)
+                            }
+                            WorkerInactiveMessage::Stop => {} // Already stopped
+                            WorkerInactiveMessage::End => {
+                                self.status = Status::End;
+                                break 'inactive;
+                            }
+                        },
+                        Err(_) => {
+                            // Channel lost, kill thread
+                            self.status = Status::End;
+                            break 'inactive;
+                        }
+                    }
+                }
             }
         }
 
         self.send_message_to_supervisor(SupervisorWorkerMessage::Finished(self.worker_id));
+    }
+
+    /// Worker active routine
+    #[inline]
+    pub fn active(&mut self, listener: Arc<Mutex<TcpListener>>, buffer: &mut Vec<u8>) {
+        // Set as active
+        self.listener = Some(listener);
+        self.status = Status::Active;
+
+        // Purge any message left
+
+        'worker: loop {
+            match self.status {
+                Status::Active => self.handle_worker_routine(buffer),
+                _ => break 'worker,
+            }
+        }
     }
 
     /// Handle worker active routine
@@ -137,25 +171,27 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                     Ok(msg) => msg,
                     Err(_) => {
                         // Channel lost, break main
-                        self.status = WorkerStatus::Ended;
+                        self.status = Status::End;
                         return;
                     }
                 },
                 Err(_) => {
                     // Mutex error, close thread
-                    self.status = WorkerStatus::Ended;
+                    self.status = Status::End;
                     return;
                 }
             }
         };
 
         match worker_message {
-            WorkerMessage::Incoming => self.handle_worker_incoming(),
-            WorkerMessage::Receive(client_id) => self.handle_worker_receive(client_id, buffer),
-            WorkerMessage::Send(message) => self.handle_worker_send(buffer, message),
-            WorkerMessage::Clear(client_id) => self.handle_worker_clear(client_id, buffer),
-            WorkerMessage::Disconnect(client_id) => self.handle_worker_disconnect(client_id),
-            WorkerMessage::End => self.status = WorkerStatus::Ended,
+            WorkerActiveMessage::Incoming => self.handle_worker_incoming(),
+            WorkerActiveMessage::Receive(client_id) => {
+                self.handle_worker_receive(client_id, buffer)
+            }
+            WorkerActiveMessage::Send(message) => self.handle_worker_send(buffer, message),
+            WorkerActiveMessage::Disconnect(client_id) => self.handle_worker_disconnect(client_id),
+            WorkerActiveMessage::End => self.status = Status::End,
+            WorkerActiveMessage::Stop => self.status = Status::Stopping,
         }
     }
 
@@ -175,7 +211,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     /// Purge incoming connections
     #[inline]
     fn handle_worker_incoming_purge(&mut self) {
-        let listener = self.listener.clone();
+        let listener = self.listener.as_mut().unwrap().clone();
 
         match listener.lock() {
             Ok(listener) => {
@@ -201,7 +237,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     /// Handle an incoming stream connection
     #[inline]
     fn handle_worker_incoming_stream(&mut self) {
-        let listener = self.listener.clone();
+        let listener = self.listener.as_mut().unwrap().clone();
 
         match listener.lock() {
             Ok(listener) => {
@@ -495,7 +531,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
             .send(SupervisorMessage::FromWorker(message))
         {
             Ok(_) => {}
-            Err(_) => self.status = WorkerStatus::Ended, // Channel lost, kill worker
+            Err(_) => self.status = Status::End, // Channel lost, kill worker
         }
     }
 
@@ -508,7 +544,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
             .send(ServerMessage::Incoming(incoming))
         {
             Ok(_) => {}
-            Err(_) => self.status = WorkerStatus::Ended, // Channel lost, kill worker
+            Err(_) => self.status = Status::End, // Channel lost, kill worker
         }
     }
 }

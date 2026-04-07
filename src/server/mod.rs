@@ -22,8 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::net::SocketAddr;
-
 #[doc(hidden)]
 mod server;
 
@@ -48,7 +46,7 @@ mod dispatcher;
 
 pub use builder::ServerBuilder;
 pub use server::Server;
-pub use status::ServerStatus;
+pub use status::Status;
 
 use crate::MAXIMUM_MESSAGE_SIZE;
 

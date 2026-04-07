@@ -27,7 +27,7 @@ use std::{thread, time::Duration};
 use baphonet::{
     client::status::ClientStatus,
     server::{
-        ClientId, Server, ServerBuilder,
+        ClientId, ServerBuilder,
         error::{ErrorServer, ErrorUpdate},
         message::{ServerMessage, SupervisorUpdate},
     },

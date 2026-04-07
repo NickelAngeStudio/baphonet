@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,12 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-
-
 /// Possible server statuses
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub enum ServerStatus {
+pub enum Status {
     /// Server is currently inactive.
     Inactive,
 
@@ -37,33 +34,9 @@ pub enum ServerStatus {
     /// Server is up and running
     Active,
 
-    /// Server is paused. Connections are maintained but nothing is read or sent.
-    Paused,
+    /// Server is currently stopping and will soon be inactive.
+    Stopping,
 
-    /// Server is currently ending and will soon be inactive.
-    Ending,
-}
-
-/// Possible supervisor statuses
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum SupervisorStatus {
-
-    /// Supervisor is up and running
-    Active,
-
-    /// Supervisor is paused. Connections are maintained but nothing is read or sent.
-    Paused,
-
-    /// Supervisor is ending and will soon be dropped.
-    Ending,
-
-}
-
-/// Possible status of worker
-pub(crate) enum WorkerStatus {
-    /// Worker is active
-    Active,
-
-    /// Worker has ended
-    Ended
+    /// Server is ending and doing its [`Drop`] routine.
+    End,
 }

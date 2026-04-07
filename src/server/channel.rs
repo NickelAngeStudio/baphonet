@@ -22,9 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-/// Default capacity of the dispatcher vec
-const DISPATCHER_VEC_CAPACITY: usize = 16;
-
 use std::sync::{
     Arc, Mutex,
     mpsc::{self, Receiver, Sender},
@@ -33,125 +30,53 @@ use std::sync::{
 use crate::{
     Message,
     server::{
-        ServerStatus,
         dispatcher::Dispatcher,
-        message::{DispatcherMessage, ServerMessage, SupervisorMessage, WorkerMessage},
+        message::{ServerMessage, SupervisorMessage, WorkerActiveMessage, WorkerInactiveMessage},
     },
 };
 
 /// All server communication channels
 pub(super) struct ServerChannel<IN: Message + Send, OUT: Message + Send + 'static> {
     /// Receive of server messages
-    pub rcv_server: Option<Receiver<ServerMessage<IN>>>,
+    pub(crate) rcv_server: Receiver<ServerMessage<IN>>,
 
-    /// Channels of Server dispatcher
-    pub sdr_dispatcher: Vec<Sender<DispatcherMessage<OUT>>>,
+    /// Sender channel for supervisor messages
+    pub(crate) sdr_supervisor: Sender<SupervisorMessage>,
 
-    // Sender channel for supervisor messages
-    pub sdr_supervisor: Option<Sender<SupervisorMessage>>,
+    /// Sender channels for worker messages
+    pub(crate) sdr_worker: Sender<WorkerActiveMessage<OUT>>,
 
-    // Sender channels for worker messages
-    pub sdr_worker: Option<Sender<WorkerMessage<OUT>>>,
+    /// Dispatcher of client messages
+    pub(crate) dispatcher: Dispatcher<OUT>,
 }
 
 impl<IN: Message + Send, OUT: Message + Send> ServerChannel<IN, OUT> {
-    /// Create a new instance of server communication channels
-    pub fn new() -> ServerChannel<IN, OUT> {
-        ServerChannel {
-            rcv_server: None,
-            sdr_dispatcher: Vec::with_capacity(DISPATCHER_VEC_CAPACITY),
-            sdr_supervisor: None,
-            sdr_worker: None,
-        }
-    }
-
-    /// Create and register a new [`Dispatcher`].
-    ///
-    /// # Returns
-    /// A new [`Dispatcher`].
-    pub fn dispatcher(&mut self, server_status: ServerStatus) -> Dispatcher<OUT> {
-        let (sdr_dispatcher, rcv_dispatcher) = mpsc::channel::<DispatcherMessage<OUT>>();
-
-        let mut sms = Dispatcher::new(rcv_dispatcher, server_status);
-
-        self.sdr_dispatcher.push(sdr_dispatcher); // Register sender
-        match self.sdr_worker.as_ref() {
-            Some(sender) => sms.sdr_worker = Some(sender.clone()),
-            None => {}
-        }
-
-        sms
-    }
-
-    /// Send a [`DispatcherMessage`] to dispatchers
-    pub fn send_message_to_dispatcher(&mut self, message: DispatcherMessage<OUT>) {
-        match message {
-            DispatcherMessage::Status(server_status) => {
-                for sdr in &self.sdr_dispatcher {
-                    match sdr.send(DispatcherMessage::Status(server_status.clone())) {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    }
-                }
-            }
-            DispatcherMessage::Reference(sender) => {
-                for sdr in &self.sdr_dispatcher {
-                    match sdr.send(DispatcherMessage::Reference(sender.clone())) {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    }
-                }
-            }
-            DispatcherMessage::Ping => {
-                for sdr in &self.sdr_dispatcher {
-                    match sdr.send(DispatcherMessage::Ping) {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    }
-                }
-            }
-        }
-    }
-
-    /// Create communication channels of supervisor
-    ///
-    /// # Returns
-    /// New [`ServerChannel`] instance with channels used.
-    pub fn supervisor_channels(&mut self) -> SupervisorChannel<IN, OUT> {
+    /// Create both [`ServerChannel`] and [`SupervisorChannel`].
+    pub(crate) fn create_server_supervisor_channels()
+    -> (ServerChannel<IN, OUT>, SupervisorChannel<IN, OUT>) {
         let (sdr_server, rcv_server) = mpsc::channel::<ServerMessage<IN>>();
         let (sdr_supervisor, rcv_supervisor) = mpsc::channel::<SupervisorMessage>();
-        let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<OUT>>();
+        let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerActiveMessage<OUT>>();
 
         let sdr_supervisor_clone = sdr_supervisor.clone();
         let sdr_worker_clone = sdr_worker.clone();
+        let sdr_worker_clone2 = sdr_worker.clone();
 
-        self.rcv_server = Some(rcv_server);
-        self.sdr_supervisor = Some(sdr_supervisor);
-        self.sdr_worker = Some(sdr_worker);
-
-        SupervisorChannel::new(
-            sdr_server,
-            sdr_supervisor_clone,
-            rcv_supervisor,
-            sdr_worker_clone,
-            rcv_worker,
+        (
+            ServerChannel {
+                rcv_server,
+                sdr_supervisor,
+                sdr_worker,
+                dispatcher: Dispatcher::new(sdr_worker_clone2),
+            },
+            SupervisorChannel::new(
+                sdr_server,
+                sdr_supervisor_clone,
+                rcv_supervisor,
+                sdr_worker_clone,
+                rcv_worker,
+            ),
         )
-    }
-
-    /// Clear all channels except for active [`Dispatcher`]
-    pub fn clear(&mut self) {
-        self.rcv_server = None;
-        self.sdr_supervisor = None;
-        self.sdr_worker = None;
-
-        for i in self.sdr_dispatcher.len()..0 {
-            match self.sdr_dispatcher[i].send(DispatcherMessage::Ping) {
-                Ok(_) => {}
-                Err(_) => {
-                    self.sdr_dispatcher.swap_remove(i);
-                }
-            }
-        }
     }
 }
 
@@ -165,8 +90,8 @@ pub(crate) struct SupervisorChannel<IN: Message + Send, OUT: Message + Send> {
     pub rcv_supervisor: Receiver<SupervisorMessage>,
 
     // Sender and receiver channels for worker messages
-    pub sdr_worker: Sender<WorkerMessage<OUT>>,
-    pub rcv_worker: Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
+    pub sdr_worker: Sender<WorkerActiveMessage<OUT>>,
+    pub rcv_worker: Arc<Mutex<Receiver<WorkerActiveMessage<OUT>>>>,
 }
 
 impl<IN: Message + Send, OUT: Message + Send> SupervisorChannel<IN, OUT> {
@@ -174,8 +99,8 @@ impl<IN: Message + Send, OUT: Message + Send> SupervisorChannel<IN, OUT> {
         sdr_server: Sender<ServerMessage<IN>>,
         sdr_supervisor: Sender<SupervisorMessage>,
         rcv_supervisor: Receiver<SupervisorMessage>,
-        sdr_worker: Sender<WorkerMessage<OUT>>,
-        rcv_worker: Receiver<WorkerMessage<OUT>>,
+        sdr_worker: Sender<WorkerActiveMessage<OUT>>,
+        rcv_worker: Receiver<WorkerActiveMessage<OUT>>,
     ) -> SupervisorChannel<IN, OUT> {
         SupervisorChannel {
             sdr_server,
@@ -195,19 +120,24 @@ pub(crate) struct WorkerChannel<IN: Message + Send, OUT: Message + Send> {
     /// Channel Message sender and receiver to supervisor
     pub sdr_supervisor: Sender<SupervisorMessage>,
 
+    // Unique receiver channel while inactive
+    pub rcv_inactive: Receiver<WorkerInactiveMessage>,
+
     // Receiver channels for worker messages
-    pub rcv_worker: Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
+    pub rcv_worker: Arc<Mutex<Receiver<WorkerActiveMessage<OUT>>>>,
 }
 
 impl<IN: Message + Send, OUT: Message + Send> WorkerChannel<IN, OUT> {
     pub fn new(
         sdr_server: Sender<ServerMessage<IN>>,
         sdr_supervisor: Sender<SupervisorMessage>,
-        rcv_worker: Arc<Mutex<Receiver<WorkerMessage<OUT>>>>,
+        rcv_inactive: Receiver<WorkerInactiveMessage>,
+        rcv_worker: Arc<Mutex<Receiver<WorkerActiveMessage<OUT>>>>,
     ) -> WorkerChannel<IN, OUT> {
         WorkerChannel {
             sdr_server,
             sdr_supervisor,
+            rcv_inactive,
             rcv_worker,
         }
     }

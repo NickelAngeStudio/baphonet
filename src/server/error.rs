@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use crate::server::{ClientId, client::Client};
+use crate::server::ClientId;
 
 /// Error that happens to the server
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -79,12 +79,6 @@ pub enum ErrorServer {
 /// Error given by the [`Dispatcher`].
 #[derive(Debug, PartialEq, Clone)]
 pub enum ErrorDispatcher {
-    /// Server is inactive
-    Inactive,
-
-    /// Sender is currently paused
-    Paused,
-
     /// Sender channel is disconnected from the server (server dropped).
     ChannelDisconnected,
 

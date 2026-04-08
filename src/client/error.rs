@@ -67,12 +67,12 @@ pub enum ErrorClient {
 
 /// Error given by the [`Dispatcher`].
 #[derive(Debug, PartialEq, Clone)]
-pub enum ErrorDispatcher {
-    /// Client isn't connected to the server.
-    Disconnected,
-
-    /// Dispatcher is disconnected from the client.
+pub enum ErrorTransceiver {
+    /// Transceiver is disconnected from the client. (client dropped)
     ChannelDisconnected,
+
+    /// Transceiver::receive_timeout() has expired.
+    Timeout,
 }
 
 /// Possible [`Worker`](super::Worker) error

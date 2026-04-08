@@ -26,23 +26,30 @@ use crate::{
     Message,
     server::{
         ClientId,
-        error::ErrorDispatcher,
+        error::ErrorTransceiver,
         message::{OutgoingMessage, WorkerActiveMessage},
     },
 };
 
-/// The server dispatcher can send message to client
+/// The transceiver transmitter can send message to client
 /// and can be shared to multiple threads.
-#[derive(Debug, Clone)]
-pub struct Dispatcher<OUT: Message + Send + 'static> {
+pub struct Transmitter<OUT: Message + Send + 'static> {
     /// Clone of Sender channel for worker message
     sdr_worker: Sender<WorkerActiveMessage<OUT>>,
 }
 
-impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
-    /// Create a new instance of [`Dispatcher`] with a message receiver.
-    pub(crate) fn new(sdr_worker: Sender<WorkerActiveMessage<OUT>>) -> Dispatcher<OUT> {
-        Dispatcher { sdr_worker }
+impl<OUT: Message + Send + 'static> Clone for Transmitter<OUT> {
+    fn clone(&self) -> Self {
+        Self {
+            sdr_worker: self.sdr_worker.clone(),
+        }
+    }
+}
+
+impl<OUT: Message + Send + 'static> Transmitter<OUT> {
+    /// Create a new instance of [`Transmitter`] with a message receiver.
+    pub(crate) fn new(sdr_worker: Sender<WorkerActiveMessage<OUT>>) -> Transmitter<OUT> {
+        Transmitter { sdr_worker }
     }
 
     /// Send message to one connected client
@@ -51,14 +58,14 @@ impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
     /// - [`Result`]:
     ///     - Ok(()) if message was sent to thread.
     ///     - Err([`ErrorDispatcher::ChannelDisconnected`]) if server was dropped.
-    pub fn send(&self, client_id: ClientId, message: OUT) -> Result<(), ErrorDispatcher> {
+    pub fn send(&self, client_id: ClientId, message: OUT) -> Result<(), ErrorTransceiver> {
         match self
             .sdr_worker
             .send(WorkerActiveMessage::Send(OutgoingMessage::<OUT>::new(
                 client_id, message,
             ))) {
             Ok(_) => Ok(()),
-            Err(_) => Err(ErrorDispatcher::ChannelDisconnected),
+            Err(_) => Err(ErrorTransceiver::ChannelDisconnected),
         }
     }
 
@@ -73,7 +80,7 @@ impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
         &self,
         destinations: &Vec<ClientId>,
         message: OUT,
-    ) -> Result<(), ErrorDispatcher> {
+    ) -> Result<(), ErrorTransceiver> {
         if destinations.len() > 0 {
             match self
                 .sdr_worker
@@ -82,10 +89,10 @@ impl<OUT: Message + Send + 'static> Dispatcher<OUT> {
                     message,
                 ))) {
                 Ok(_) => Ok(()), // Message was sent
-                Err(_) => Err(ErrorDispatcher::ChannelDisconnected),
+                Err(_) => Err(ErrorTransceiver::ChannelDisconnected),
             }
         } else {
-            Err(ErrorDispatcher::NoDestination)
+            Err(ErrorTransceiver::NoDestination)
         }
     }
 }
@@ -100,7 +107,8 @@ mod tests {
     use crate::{
         Message,
         server::{
-            ClientId, dispatcher::Dispatcher, error::ErrorDispatcher, message::WorkerActiveMessage,
+            ClientId, error::ErrorTransceiver, message::WorkerActiveMessage,
+            transmitter::Transmitter,
         },
     };
 
@@ -120,11 +128,11 @@ mod tests {
     }
 
     #[test]
-    fn dispatcher_send_ok() {
+    fn transmitter_send_ok() {
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerActiveMessage<TestMessage>>();
-        let dispatcher = Dispatcher::new(sdr_worker);
+        let transmitter = Transmitter::new(sdr_worker);
 
-        dispatcher.send(32, TestMessage {}).unwrap();
+        transmitter.send(32, TestMessage {}).unwrap();
 
         match rcv_worker.recv_timeout(Duration::from_millis(100)) {
             Ok(message) => match message {
@@ -138,12 +146,12 @@ mod tests {
     }
 
     #[test]
-    fn dispatcher_send_vec_ok() {
+    fn transmitter_send_vec_ok() {
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerActiveMessage<TestMessage>>();
-        let dispatcher = Dispatcher::new(sdr_worker);
+        let trasmitter = Transmitter::new(sdr_worker);
 
         let client_vec: Vec<ClientId> = vec![1, 2, 3, 4, 5, 6];
-        dispatcher.send_vec(&client_vec, TestMessage {}).unwrap();
+        trasmitter.send_vec(&client_vec, TestMessage {}).unwrap();
 
         match rcv_worker.recv_timeout(Duration::from_millis(100)) {
             Ok(message) => match message {
@@ -158,14 +166,14 @@ mod tests {
     }
 
     #[test]
-    fn dispatcher_send_vec_error_no_destination() {
+    fn transmitter_send_vec_error_no_destination() {
         let (sdr_worker, _rcv_worker) = mpsc::channel::<WorkerActiveMessage<TestMessage>>();
-        let dispatcher = Dispatcher::new(sdr_worker);
+        let transmitter = Transmitter::new(sdr_worker);
 
         let destinations: Vec<ClientId> = Vec::new();
-        match dispatcher.send_vec(&destinations, TestMessage {}) {
+        match transmitter.send_vec(&destinations, TestMessage {}) {
             Ok(_) => panic!("Shouldn't be Ok()!"),
-            Err(err) => assert_eq!(err, ErrorDispatcher::NoDestination),
+            Err(err) => assert_eq!(err, ErrorTransceiver::NoDestination),
         }
     }
 }

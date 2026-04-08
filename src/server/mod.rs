@@ -31,6 +31,8 @@ mod builder;
 pub(crate) mod client;
 
 pub mod error;
+pub mod transceiver;
+mod transmitter;
 
 pub mod message;
 pub mod supervisor;
@@ -42,7 +44,6 @@ pub mod status;
 
 #[doc(hidden)]
 pub mod channel;
-mod dispatcher;
 
 pub use builder::ServerBuilder;
 pub use server::Server;

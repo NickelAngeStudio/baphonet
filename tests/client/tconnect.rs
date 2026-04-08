@@ -24,7 +24,7 @@ SOFTWARE.
 
 use std::net::{Ipv4Addr, SocketAddr};
 
-use baphonet::client::{Client, ErrorClient, builder::ClientBuilder};
+use baphonet::client::{ErrorClient, builder::ClientBuilder};
 
 use crate::shared::{
     CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket,

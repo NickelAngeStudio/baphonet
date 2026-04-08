@@ -27,17 +27,17 @@ use crate::{
     client::{
         Client, DEFAULT_OUTGOING_SIZE, DEFAULT_POOL_RATE_PER_SECOND, ErrorClient,
         MAXIMUM_OUTGOING_SIZE, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_OUTGOING_SIZE,
-        MINIMUM_POOL_RATE_PER_SECOND, channel::ClientChannel, status::ClientStatus,
+        MINIMUM_POOL_RATE_PER_SECOND,
     },
 };
 
 /// Builder helper used to create client.
 pub struct ClientBuilder {
     /// Pool rate of the client
-    pool_rate: u64,
+    pub(crate) pool_rate: u64,
 
     /// Maximum size of outgoing message
-    outgoing_max_size: usize,
+    pub(crate) outgoing_max_size: usize,
 }
 
 impl ClientBuilder {
@@ -94,13 +94,7 @@ impl ClientBuilder {
             return Err(ErrorClient::OutgoingMessageSizeAboveMaximum);
         }
 
-        Ok(Client {
-            channels: ClientChannel::new(),
-            worker_handle: None,
-            status: ClientStatus::Disconnected,
-            pool_rate: self.pool_rate,
-            outgoing_max_size: self.outgoing_max_size,
-        })
+        Ok(Client::build(self))
     }
 }
 

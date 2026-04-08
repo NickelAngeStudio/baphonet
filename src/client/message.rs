@@ -20,46 +20,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::mpsc::Sender;
+use std::net::TcpStream;
 
-use crate::{
-    Message,
-    client::{
-        error::ErrorWorker,
-        status::{ClientStatus, WorkerStatus},
-    },
-};
+use crate::{Message, client::error::ErrorWorker};
 
-/// Message sent to client from worker
-pub enum ClientMessage<IN: Message + Send> {
-    /// Incoming message from server
-    Incoming(IN),
+/// Updates sent to client from worker.
+pub enum ClientUpdate {
+    /// Client is now connected
+    Connected,
 
     /// An error occurred from the worker thread
     Error(ErrorWorker),
 
-    /// Worker status changed
-    StatusChanged(WorkerStatus),
-}
+    /// Client is now disconnected
+    Disconnected,
 
-/// Message sent to dispatcher by client
-#[derive(Debug, Clone)]
-pub enum DispatcherMessage<OUT: Message + Send> {
-    /// Server status changed.
-    Status(ClientStatus),
-
-    /// Get the newest reference of sender
-    Reference(Sender<WorkerMessage<OUT>>),
-
-    /// Ping the [`Dispatcher`] to see if still alive
-    Ping,
+    /// Client thread ended
+    Ended,
 }
 
 /// Message sent to worker from client
 pub enum WorkerMessage<OUT: Message + Send> {
+    /// Connect to stream
+    Connect(TcpStream),
+
     /// Send a message to the server
     Send(OUT),
 
     /// Stop the worker thread
     Stop,
+
+    /// End the worker
+    End,
 }

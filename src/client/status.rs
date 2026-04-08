@@ -24,7 +24,7 @@ SOFTWARE.
 
 /// Possible client statuses
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ClientStatus {
+pub enum Status {
     /// Client is currently disconnected.
     Disconnected,
 
@@ -36,17 +36,7 @@ pub enum ClientStatus {
 
     /// Client is currently disconnecting
     Disconnecting,
-}
 
-/// Possible statuses of the worker thread
-#[derive(Debug)]
-pub enum WorkerStatus {
-    /// Worker thread is starting
-    Starting,
-
-    /// Worker thread is active
-    Active,
-
-    /// Worker thread has ended
+    /// Client has ended
     Ended,
 }

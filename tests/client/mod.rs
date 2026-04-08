@@ -29,7 +29,7 @@ mod tconnect;
 mod tclose;
 
 /// Tests for Client::message()
-mod tmessage;
+mod tupdate;
 
 /// Tests for Client::send()
-mod tdispatcher;
+mod ttransceiver;

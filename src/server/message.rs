@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 use std::{
-    net::TcpListener,
+    net::{SocketAddr, TcpListener},
     sync::{Arc, Mutex},
 };
 
@@ -32,22 +32,12 @@ use crate::{
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
-pub enum ServerMessage<IN: Message + Send> {
-    /// Incoming message of a client
-    Incoming(IncomingMessage<IN>),
-
-    /// Server update sent from supervisor
-    Update(SupervisorUpdate),
-}
-
-/// Possible server update
-#[derive(Debug, Clone, Copy)]
-pub enum SupervisorUpdate {
-    /// Supervisor is now active
+pub enum ServerUpdate {
+    /// Server is now active
     Active,
 
-    /// New client connected with Id
-    ClientConnected(ClientId),
+    /// New client connected with Id and address
+    ClientConnected(ClientId, SocketAddr),
 
     /// A client disconnected with Id
     ClientDisconnected(ClientId),
@@ -92,7 +82,7 @@ pub enum SupervisorServerMessage {
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorWorkerMessage {
     /// Client is now connected
-    Connected(ClientId),
+    Connected(ClientId, SocketAddr),
 
     /// Worker finished incoming connection job
     IncomingJobDone,

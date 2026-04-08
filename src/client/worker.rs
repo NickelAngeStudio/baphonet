@@ -22,7 +22,7 @@
 
 use std::{
     io::{Read, Write},
-    net::{SocketAddr, TcpStream},
+    net::TcpStream,
     sync::mpsc::RecvTimeoutError,
     time::{Duration, Instant},
 };
@@ -30,24 +30,20 @@ use std::{
 use crate::{
     MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE,
     client::{
-        ErrorClient,
         channel::WorkerChannel,
         error::ErrorWorker,
-        message::{ClientMessage, WorkerMessage},
-        status::WorkerStatus,
+        message::{ClientUpdate, WorkerMessage},
+        status::Status,
     },
 };
 
 /// Client Worker thread.
 pub struct Worker<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
-    /// TCP stream to server
-    stream: TcpStream,
-
     /// Channels of worker thread
     channels: WorkerChannel<IN, OUT>,
 
     /// Status of worker thread
-    status: WorkerStatus,
+    status: Status,
 
     /// Size of incoming message if any
     inc_size: Option<usize>,
@@ -65,46 +61,17 @@ pub struct Worker<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT> {
     /// Create new worker from socket address and channels.
     pub fn new(
-        addr: SocketAddr,
         outgoing_max_size: usize,
         pool_rate: u64,
         channels: WorkerChannel<IN, OUT>,
-    ) -> Result<Worker<IN, OUT>, ErrorClient> {
-        match TcpStream::connect(addr) {
-            Ok(stream) => match stream.set_nonblocking(true) {
-                Ok(_) => match stream.set_nodelay(true) {
-                    Ok(_) => Ok(Worker {
-                        stream,
-                        channels,
-                        status: WorkerStatus::Starting,
-                        inc_size: None,
-                        outgoing_max_size,
-                        last_pool: Instant::now(),
-                        pool_rate_duration: Duration::from_millis(1000 / pool_rate),
-                    }),
-                    Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
-                },
-                Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
-            },
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
-                    Err(ErrorClient::InvalidSocket)
-                }
-
-                std::io::ErrorKind::HostUnreachable
-                | std::io::ErrorKind::NetworkUnreachable
-                | std::io::ErrorKind::NotFound
-                | std::io::ErrorKind::AddrNotAvailable
-                | std::io::ErrorKind::NetworkDown => Err(ErrorClient::ServerNotFound),
-
-                std::io::ErrorKind::PermissionDenied
-                | std::io::ErrorKind::ConnectionRefused
-                | std::io::ErrorKind::ConnectionReset
-                | std::io::ErrorKind::ConnectionAborted
-                | std::io::ErrorKind::NotConnected => Err(ErrorClient::ConnectionRefused),
-
-                _ => Err(ErrorClient::UnhandledIOError(err.kind())),
-            },
+    ) -> Worker<IN, OUT> {
+        Worker {
+            channels,
+            status: Status::Disconnected,
+            inc_size: None,
+            outgoing_max_size,
+            last_pool: Instant::now(),
+            pool_rate_duration: Duration::from_millis(1000 / pool_rate),
         }
     }
 
@@ -113,15 +80,41 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
         // Create buffer on stack from MAXIMUM_MESSAGE_SIZE.
         let mut buffer = [0u8; MAXIMUM_MESSAGE_SIZE];
 
-        // Set as active
-        self.status = WorkerStatus::Active;
-        self.send_message_client(ClientMessage::StatusChanged(WorkerStatus::Active));
+        // Worker inactive loop
+        'inactive: loop {
+            match self.status {
+                Status::Ended => break 'inactive,
+                _ => {
+                    self.status = Status::Disconnected;
+                    match self.channels.rcv_worker.recv() {
+                        Ok(msg) => match msg {
+                            WorkerMessage::Connect(tcp_stream) => {
+                                self.active(tcp_stream, &mut buffer)
+                            }
+                            WorkerMessage::End => self.status = Status::Ended,
+                            _ => {} // Ignore other messages
+                        },
+                        Err(_) => break 'inactive, // Channel lost, end worker
+                    }
+                }
+            }
+        }
+
+        // Send status changed
+        self.update_client(ClientUpdate::Ended);
+    }
+
+    /// Worker active routine.
+    fn active(&mut self, mut tcp_stream: TcpStream, buffer: &mut [u8]) {
+        // Set as connected
+        self.status = Status::Connected;
+        self.update_client(ClientUpdate::Connected);
 
         'worker: loop {
             match self.status {
-                WorkerStatus::Starting | WorkerStatus::Active => {
+                Status::Connected => {
                     if self.last_pool.elapsed() > self.pool_rate_duration {
-                        self.receive(&mut buffer); // Receive message from server since pool expired
+                        self.receive(&mut tcp_stream, buffer); // Receive message from server since pool expired
                     }
                     match self
                         .channels
@@ -129,39 +122,40 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                         .recv_timeout(self.pool_rate_duration)
                     {
                         Ok(message) => match message {
-                            WorkerMessage::Send(msg) => self.send(msg, &mut buffer),
-                            WorkerMessage::Stop => self.status = WorkerStatus::Ended,
+                            WorkerMessage::Send(msg) => self.send(msg, &mut tcp_stream, buffer),
+                            WorkerMessage::Stop => self.status = Status::Disconnecting,
+                            WorkerMessage::Connect(_) => {} // Already conected
+                            WorkerMessage::End => self.status = Status::Ended,
                         },
                         Err(err) => match err {
-                            RecvTimeoutError::Timeout => self.receive(&mut buffer), // Receive message from server on timeout
-                            RecvTimeoutError::Disconnected => self.status = WorkerStatus::Ended, // Channel is lost, end worker
+                            RecvTimeoutError::Timeout => self.receive(&mut tcp_stream, buffer), // Receive message from server on timeout
+                            RecvTimeoutError::Disconnected => self.status = Status::Ended, // Channel is lost, end worker
                         },
                     }
                 }
-                WorkerStatus::Ended => break 'worker,
+                _ => break 'worker,
             }
         }
 
         // Shutdown stream
-        match self.stream.shutdown(std::net::Shutdown::Both) {
-            Ok(_) => {}
+        match tcp_stream.shutdown(std::net::Shutdown::Both) {
+            Ok(_) => self.update_client(ClientUpdate::Disconnected),
             Err(_) => {}
         }
 
-        // Send status changed
-        self.send_message_client(ClientMessage::StatusChanged(WorkerStatus::Ended));
+        // Set as disconnected
     }
 
     /// Receive message from server
-    fn receive(&mut self, buffer: &mut [u8]) {
+    fn receive(&mut self, tcp_stream: &mut TcpStream, buffer: &mut [u8]) {
         'receive: loop {
             // Fetch message size if any
-            self.inc_size = self.get_incoming_message_size(buffer);
+            self.inc_size = self.get_incoming_message_size(tcp_stream, buffer);
 
             // Fetch message if any
             match self.inc_size {
-                Some(size) => match self.get_incoming_message(&mut buffer[..size]) {
-                    Some(incoming) => self.send_message_client(ClientMessage::Incoming(incoming)),
+                Some(size) => match self.get_incoming_message(tcp_stream, &mut buffer[..size]) {
+                    Some(incoming) => self.send_incoming(incoming),
                     None => break 'receive,
                 },
                 None => break 'receive,
@@ -174,11 +168,15 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
 
     /// Get incoming message size.
     #[inline]
-    fn get_incoming_message_size(&mut self, buffer: &mut [u8]) -> Option<usize> {
+    fn get_incoming_message_size(
+        &mut self,
+        tcp_stream: &mut TcpStream,
+        buffer: &mut [u8],
+    ) -> Option<usize> {
         match self.inc_size {
             Some(size) => Some(size), // If size is already read, keep it
             None => {
-                match self.stream.read_exact(&mut buffer[..SIZE_OF_MESSAGE_SIZE]) {
+                match tcp_stream.read_exact(&mut buffer[..SIZE_OF_MESSAGE_SIZE]) {
                     Ok(_) => {
                         let size =
                             u16::from_le_bytes(buffer[..SIZE_OF_MESSAGE_SIZE].try_into().unwrap())
@@ -188,9 +186,9 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                             Some(size)
                         } else {
                             // Clear stream.
-                            Self::clear_stream(&mut self.stream, buffer);
+                            Self::clear_stream(tcp_stream, buffer);
                             // Notify supervisor
-                            self.send_message_client(ClientMessage::Error(
+                            self.update_client(ClientUpdate::Error(
                                 ErrorWorker::IncomingMessageTooLarge,
                             ));
                             None
@@ -213,15 +211,20 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
 
     /// Get incoming message
     #[inline]
-    fn get_incoming_message(&mut self, buffer: &mut [u8]) -> Option<IN> {
-        match self.stream.read_exact(buffer) {
+    fn get_incoming_message(
+        &mut self,
+        tcp_stream: &mut TcpStream,
+        buffer: &mut [u8],
+    ) -> Option<IN> {
+        match tcp_stream.read_exact(buffer) {
             Ok(_) => match IN::deserialize(buffer) {
-                Ok(message) => Some(message),
+                Ok(message) => {
+                    self.inc_size = None; // Reset incoming size.
+                    Some(message)
+                }
                 Err(_) => {
-                    Self::clear_stream(&mut self.stream, buffer); // Clear stream
-                    self.send_message_client(ClientMessage::Error(
-                        ErrorWorker::IncomingMessageError,
-                    ));
+                    Self::clear_stream(tcp_stream, buffer); // Clear stream
+                    self.update_client(ClientUpdate::Error(ErrorWorker::IncomingMessageError));
                     None
                 }
             },
@@ -239,7 +242,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
     }
 
     /// Send message to server
-    fn send(&mut self, msg: OUT, buffer: &mut [u8]) {
+    fn send(&mut self, msg: OUT, tcp_stream: &mut TcpStream, buffer: &mut [u8]) {
         match msg.serialize(buffer) {
             Ok(size) => {
                 if size <= MAXIMUM_MESSAGE_SIZE {
@@ -247,10 +250,10 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                     let size_bytes = (size as u16).to_le_bytes();
 
                     // Send size
-                    match self.stream.write_all(&size_bytes) {
+                    match tcp_stream.write_all(&size_bytes) {
                         Ok(_) => {
                             // Send message
-                            match self.stream.write_all(&buffer[..size]) {
+                            match tcp_stream.write_all(&buffer[..size]) {
                                 Ok(_) => {
                                     // Send message
                                 }
@@ -260,12 +263,12 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                         Err(_) => self.handle_connection_lost(), // Connection lost
                     }
                 } else {
-                    self.send_message_client(ClientMessage::Error(
+                    self.update_client(ClientUpdate::Error(
                         crate::client::error::ErrorWorker::OutgoingMessageTooLarge,
                     ));
                 }
             }
-            Err(_) => self.send_message_client(ClientMessage::Error(
+            Err(_) => self.update_client(ClientUpdate::Error(
                 crate::client::error::ErrorWorker::OutgoingSerializeError,
             )),
         }
@@ -274,10 +277,10 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
     /// Handle worker connection lost
     #[inline]
     fn handle_connection_lost(&mut self) {
-        self.send_message_client(ClientMessage::Error(
+        self.update_client(ClientUpdate::Error(
             super::error::ErrorWorker::ConnectionLost,
         ));
-        self.status = WorkerStatus::Ended;
+        self.status = Status::Disconnecting;
     }
 
     /// Clear a TcpStream with a buffer.
@@ -297,22 +300,30 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
         }
     }
 
+    /// Send incoming message to transceiver
+    fn send_incoming(&mut self, incoming: IN) {
+        match self.channels.sdr_incoming.send(incoming) {
+            Ok(_) => {}
+            Err(_) => self.status = Status::Ended,
+        }
+    }
+
     /// Send a client message to client.
-    fn send_message_client(&mut self, msg: ClientMessage<IN>) {
+    fn update_client(&mut self, msg: ClientUpdate) {
         #[cfg(debug_assertions)]
         {
             match &msg {
                 // Print error in debug mode
-                ClientMessage::Error(err) => println!("Client Worker {:?}", err),
+                ClientUpdate::Error(err) => println!("Client Worker {:?}", err),
                 _ => {}
             }
         }
 
-        match self.channels.sdr_client.send(msg) {
+        match self.channels.sdr_update.send(msg) {
             Ok(_) => {} // Message send with success.
             Err(_) => {
                 // Channel is closed, communication to client is lost, end worker.
-                self.status = WorkerStatus::Ended;
+                self.status = Status::Ended;
             }
         }
     }

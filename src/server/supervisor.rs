@@ -38,10 +38,10 @@ use crate::{
         ClientId,
         channel::{SupervisorChannel, WorkerChannel},
         client::Clients,
-        error::{ErrorServer, ErrorUpdate},
+        error::ErrorUpdate,
         message::{
-            ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
-            SupervisorWorkerMessage, WorkerActiveMessage, WorkerInactiveMessage,
+            ServerUpdate, SupervisorMessage, SupervisorServerMessage, SupervisorWorkerMessage,
+            WorkerActiveMessage, WorkerInactiveMessage,
         },
         status::Status,
         task::{TaskStatus, Tasks},
@@ -142,7 +142,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
         // Join worker threads
         self.join_workers();
-        self.send_update_to_server(SupervisorUpdate::Ended);
+        self.send_update_to_server(ServerUpdate::Ended);
     }
 
     pub fn active(&mut self, listener: Arc<Mutex<TcpListener>>) {
@@ -155,7 +155,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
         // Set active
         self.status = Status::Active;
-        self.send_update_to_server(SupervisorUpdate::Active);
+        self.send_update_to_server(ServerUpdate::Active);
 
         'supervisor: loop {
             match self.status {
@@ -197,7 +197,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         }
 
         // Tell servr currently inactive
-        self.send_update_to_server(SupervisorUpdate::Inactive);
+        self.send_update_to_server(ServerUpdate::Inactive);
     }
 
     /// Purge worker receive channel of any leftover message before
@@ -262,8 +262,8 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
     #[inline]
     fn handle_worker_message(&mut self, message: SupervisorWorkerMessage) {
         match message {
-            SupervisorWorkerMessage::Connected(client_id) => {
-                self.handle_worker_message_connected(client_id)
+            SupervisorWorkerMessage::Connected(client_id, socket) => {
+                self.handle_worker_message_connected(client_id, socket)
             }
             SupervisorWorkerMessage::IncomingJobDone => self.tasks.incoming = TaskStatus::Ready,
             SupervisorWorkerMessage::ReceiveJobDone(client_id) => {
@@ -281,12 +281,12 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
     /// Handle Connected worker message
     #[inline]
-    fn handle_worker_message_connected(&mut self, client_id: ClientId) {
+    fn handle_worker_message_connected(&mut self, client_id: ClientId, socket: SocketAddr) {
         // Register task
         self.tasks.reception[client_id as usize] = Some(TaskStatus::Ready);
 
         // Notify server
-        self.send_update_to_server(SupervisorUpdate::ClientConnected(client_id));
+        self.send_update_to_server(ServerUpdate::ClientConnected(client_id, socket));
     }
 
     /// Handle received done worker message
@@ -301,7 +301,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         self.remove_client_from_lists(client_id);
 
         // Notify server
-        self.send_update_to_server(SupervisorUpdate::ClientDisconnected(client_id));
+        self.send_update_to_server(ServerUpdate::ClientDisconnected(client_id));
     }
 
     /// Handle worker client not found
@@ -313,7 +313,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         }
 
         // Notify server of error
-        self.send_update_to_server(SupervisorUpdate::Error(error));
+        self.send_update_to_server(ServerUpdate::Error(error));
     }
 
     /// Handle worker message that it is finished
@@ -416,7 +416,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
             let (sdr_inactive, rcv_inactive) = mpsc::channel::<WorkerInactiveMessage>();
 
             let worker_channels = WorkerChannel::new(
-                channels.sdr_server.clone(),
+                channels.sdr_incoming.clone(),
                 channels.sdr_supervisor.clone(),
                 rcv_inactive,
                 channels.rcv_worker.clone(),
@@ -446,8 +446,8 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
     /// Send [`SupervisorUpdate`] to the server.
     #[inline]
-    fn send_update_to_server(&mut self, update: SupervisorUpdate) {
-        match self.channels.sdr_server.send(ServerMessage::Update(update)) {
+    fn send_update_to_server(&mut self, update: ServerUpdate) {
+        match self.channels.sdr_server.send(update) {
             Ok(_) => {}
             Err(_) => self.status = Status::End, // Channel lost, kill supervisor
         }

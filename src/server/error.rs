@@ -78,9 +78,12 @@ pub enum ErrorServer {
 
 /// Error given by the [`Dispatcher`].
 #[derive(Debug, PartialEq, Clone)]
-pub enum ErrorDispatcher {
-    /// Sender channel is disconnected from the server (server dropped).
+pub enum ErrorTransceiver {
+    /// Channel are disconnected from the server (server dropped).
     ChannelDisconnected,
+
+    /// Transceiver::receive_timeout() has expired.
+    Timeout,
 
     /// Message has no destinations when using [`send_vec`].
     NoDestination,

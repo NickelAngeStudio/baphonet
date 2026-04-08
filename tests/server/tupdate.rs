@@ -32,10 +32,7 @@ use crate::{
     },
     timeout_loop,
 };
-use baphonet::server::{
-    ClientId,
-    message::{ServerMessage, SupervisorUpdate},
-};
+use baphonet::server::{ClientId, message::ServerUpdate};
 
 /// Message sent per client
 const MESSAGE_PER_CLIENT: usize = u8::MAX as usize;
@@ -48,7 +45,7 @@ fn server_message_none() {
     );
 
     timeout_loop! {
-        match server.message() {
+        match server.update() {
             Some(_) => {},
             None => break,
         }
@@ -95,13 +92,10 @@ fn server_message_update_active() {
     );
 
     timeout_loop! {
-        match server.message() {
+        match server.update() {
             Some(message) => match message {
-                ServerMessage::Incoming(_) => {},
-                ServerMessage::Update(update) => match update{
-                    SupervisorUpdate::Active => break ,
-                    _ => {},
-                },
+                ServerUpdate::Active => break,
+                _ => {}
             },
             None => {},
         }
@@ -205,17 +199,12 @@ fn server_message_update_client_connected(worker_count: usize, count: usize) {
     let total_client_id: usize = accumulate(clients.len());
     let mut sum_client_id: usize = 0;
     timeout_loop! {
-        match server.message() {
+        match server.update() {
             Some(msg) => match msg {
-                ServerMessage::Update(update) => {
-                    match update {
-                        SupervisorUpdate::ClientConnected(client_id) => {
-                            sum_client_id += client_id as usize;
-                            if sum_client_id == total_client_id {
-                                break;
-                            }
-                        },
-                        _ => {},
+                ServerUpdate::ClientConnected(client_id, _) => {
+                    sum_client_id += client_id as usize;
+                    if sum_client_id == total_client_id {
+                        break;
                     }
                 },
                 _ => {},
@@ -251,10 +240,10 @@ fn server_message_some_incoming_client(worker_count: usize, client_count: usize)
     let control = ClientToServerMessage::control();
     let timeout = Duration::from_millis(100 * clients.len() as u64);
     timeout_loop! { timeout,
-        match server.message(){
+        match server.update(){
             Some(msg) => {
                 match msg {
-                    ServerMessage::Incoming(incoming_message) => {
+                    ServerUpdate::Incoming(incoming_message) => {
                         compare_client_server_message(&control, &incoming_message.message);
                         msg_rcv[incoming_message.client as usize] += 1;
                     },
@@ -300,9 +289,9 @@ fn server_message_update_client_disconnected(worker_count: usize, count: usize) 
     }
 
     timeout_loop! {
-        match server.message() {
+        match server.update() {
             Some(msg) => match msg {
-                ServerMessage::Update(update) => {
+                ServerUpdate::Update(update) => {
                     match update {
                         SupervisorUpdate::ClientDisconnected(client_id) => {
                             sum_client_id += client_id as usize;

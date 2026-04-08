@@ -33,13 +33,10 @@ use crate::{
         ClientId, ServerBuilder, Status,
         channel::ServerChannel,
         client::{Client, Clients, ServerClient},
-        dispatcher::Dispatcher,
         error::ErrorServer,
-        message::{
-            ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
-            WorkerActiveMessage,
-        },
+        message::{ServerUpdate, SupervisorMessage, SupervisorServerMessage, WorkerActiveMessage},
         supervisor::Supervisor,
+        transceiver::Transceiver,
     },
 };
 
@@ -138,70 +135,59 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
         }
     }
 
-    /// Create the TcpListener from [`SocketAddr`].
-    #[inline]
-    fn create_tcp_listener(socket: SocketAddr) -> Result<TcpListener, ErrorServer> {
-        match TcpListener::bind(socket) {
-            Ok(listener) => {
-                // This should crash instead of having a blocking listener
-                listener.set_nonblocking(true).unwrap();
-                Ok(listener)
-            }
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::AddrInUse => Err(ErrorServer::SocketAddressAlreadyUsed),
-                std::io::ErrorKind::InvalidInput => Err(ErrorServer::SocketInvalid),
-                _ => Err(ErrorServer::UnhandledIOError(err.kind())),
-            },
-        }
-    }
-
-    /// Get the [`Dispatcher`] that can send message to clients.
-    ///
-    /// The dispatcher can be cloned and shared with other thread.
-    pub fn dispatcher(&mut self) -> &Dispatcher<OUT> {
-        &self.channels.dispatcher
-    }
-
     /// Returns current server status
     pub fn status(&self) -> Status {
         self.status
     }
 
-    /// Get incoming client message and/or server update.
+    /// Returns the transceiver used to receive and send message.
+    ///
+    /// The transceiver ownership can be taken with Take() to move
+    /// to another thread.
+    pub fn transceiver(&mut self) -> &mut Option<Transceiver<IN, OUT>> {
+        &mut self.channels.transceiver
+    }
+
+    /// Get server update.
     ///
     /// Returns :
     /// - [`Result`]:
     ///     - Some([`ServerMessage`]) if message found.
     ///     - None if no message found.
-    pub fn message(&mut self) -> Option<ServerMessage<IN>> {
+    pub fn update(&mut self) -> Option<ServerUpdate> {
         match self.channels.rcv_server.try_recv() {
-            Ok(message) => match &message {
-                ServerMessage::Update(supervisor_update) => match supervisor_update {
-                    SupervisorUpdate::Active => {
-                        self.status = Status::Active;
-                        Some(message)
-                    }
-                    SupervisorUpdate::Inactive => {
-                        self.status = Status::Inactive;
-                        Some(message)
-                    }
-                    _ => Some(message),
-                },
-                _ => Some(message),
-            },
+            Ok(update) => self.handle_update(update),
             Err(_) => None,
         }
     }
 
-    /// Get list of currently connected clients
+    /// Get list of currently connected clients with addresses.
     ///
     /// Returns
     /// - [`Result`]
-    ///     - Ok(Vec<[`Client`]>) if request was successful
-    ///     - Err([`Error::ServerInactive`]) if server hasn't started
-    ///     - Err([`Error::ClientSocketError`]) if client a address can't be fetched.
+    ///     - Ok(Vec<[`ServerClient`]>) if request was successful
+    ///     - Err([`ErrorServer::Inactive`]) if server is inactive.
+    ///     - Err([`ErrorServer::UnexpectedError`]) for mutex errors.
     pub fn clients(&mut self) -> Result<Vec<ServerClient>, ErrorServer> {
-        todo!()
+        match self.status() {
+            Status::Active => {
+                let mut list = Vec::<ServerClient>::with_capacity(self.clients.len());
+                for client_id in 0..self.clients.len() {
+                    match self.clients[client_id].lock() {
+                        Ok(client) => match client.as_ref() {
+                            Some(client) => {
+                                list.push(ServerClient::from_client(client_id as u16, client));
+                            }
+                            None => {}
+                        },
+                        Err(_) => return Err(ErrorServer::UnexpectedError),
+                    }
+                }
+
+                Ok(list)
+            }
+            _ => Err(ErrorServer::Inactive),
+        }
     }
 
     /// Close a client connection from client id
@@ -246,6 +232,34 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
                 //self.join_threads_timeout()
             }
             Err(_) => todo!(), // TODO: Handle channel lost #13
+        }
+    }
+
+    /// Handle the server update before returning it.
+    #[inline]
+    fn handle_update(&mut self, update: ServerUpdate) -> Option<ServerUpdate> {
+        match update {
+            ServerUpdate::Active => self.status = Status::Active,
+            ServerUpdate::Inactive => self.status = Status::Inactive,
+            _ => {}
+        }
+        Some(update)
+    }
+
+    /// Create the TcpListener from [`SocketAddr`].
+    #[inline]
+    fn create_tcp_listener(socket: SocketAddr) -> Result<TcpListener, ErrorServer> {
+        match TcpListener::bind(socket) {
+            Ok(listener) => {
+                // This should crash instead of having a blocking listener
+                listener.set_nonblocking(true).unwrap();
+                Ok(listener)
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::AddrInUse => Err(ErrorServer::SocketAddressAlreadyUsed),
+                std::io::ErrorKind::InvalidInput => Err(ErrorServer::SocketInvalid),
+                _ => Err(ErrorServer::UnhandledIOError(err.kind())),
+            },
         }
     }
 

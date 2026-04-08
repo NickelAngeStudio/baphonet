@@ -22,25 +22,107 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::thread::{self, JoinHandle};
-
-use baphonet::{
-    client::{Client, ErrorClient, builder::ClientBuilder, status::ClientStatus},
-    server::message::ServerMessage,
-};
-
 use crate::{
     shared::{
         CLIENT_SIZE, DISPATCHER_COUNT, WORKER_COUNT, close_clients, compare_client_server_message,
-        create_server_and_clients_default, create_server_and_port,
+        compare_server_client_message, create_server_and_clients_default, create_server_and_port,
         message::{ClientToServerMessage, ServerToClientMessage},
+        send_server_message,
     },
     timeout_loop,
 };
 
 /// Messages sent by each dispatcher thread
-const MSG_PER_DISPATCHER_THREAD: usize = 64;
+const MSG_SENT_PER_THREAD: usize = 64;
 
+#[test]
+fn client_transceiver_same_thread_receive() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
+    }
+
+    let control = ServerToClientMessage::control();
+    let mut sum_recv: usize = 0;
+    let transceiver = clients[0].transceiver().as_ref().unwrap();
+    timeout_loop! {
+        match transceiver.receive() {
+            Some(msg) => {
+                compare_server_client_message(&control, &msg);
+
+                sum_recv += 1;
+                if sum_recv == MSG_SENT_PER_THREAD {
+                    break;
+                }
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_diff_thread_receive() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_same_thread_receive_wait() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_diff_thread_receive_wait() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_receive_wait_err_disconnected() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_same_thread_receive_timeout() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_diff_thread_receive_timeout() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_receive_timeout_err_disconnected() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_receive_timeout_err_timeout() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_same_thread_send() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_multi_thread_send() {
+    todo!()
+}
+
+#[test]
+fn client_transceiver_send_err_disconnected() {
+    todo!()
+}
+
+/*
 #[test]
 fn dispatcher_client_create_disconnected() {
     let (mut _server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
@@ -52,7 +134,7 @@ fn dispatcher_client_create_disconnected() {
         .unwrap();
 
     let mut dispatcher = client.dispatcher();
-    assert_eq!(dispatcher.status(), ClientStatus::Disconnected);
+    assert_eq!(dispatcher.status(), Status::Disconnected);
 }
 
 #[test]
@@ -63,14 +145,14 @@ fn dispatcher_client_create_connected() {
     >(CLIENT_SIZE.one);
 
     timeout_loop! {
-        match clients[0].message(){
+        match clients[0].update(){
             Some(_) => {},
             None => break,
         }
     }
 
     let mut dispatcher = clients[0].dispatcher();
-    assert_eq!(dispatcher.status(), ClientStatus::Connected);
+    assert_eq!(dispatcher.status(), Status::Connected);
 
     close_clients(&mut clients);
     server.stop().unwrap();
@@ -121,7 +203,7 @@ fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count:
     let mut handles = Vec::<JoinHandle<()>>::new();
     for client in &mut clients {
         timeout_loop! {
-            match client.message(){
+            match client.update(){
                 Some(_) => {},
                 None => break,
             }
@@ -147,16 +229,13 @@ fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count:
     );
     // Make sure server received messages.
     timeout_loop! {
-        match server.message(){
-            Some(msg) => match msg {
-                ServerMessage::Incoming(incoming_message) => {
-                    compare_client_server_message(&incoming_message.message, &control);
-                    incoming_count += 1;
-                    if incoming_total == incoming_count {
-                        break ;
-                    }
-                },
-                _ => {},
+        match server.transceiver().as_ref().unwrap().receive() {
+            Some(incoming) => {
+                compare_client_server_message(&incoming.message, &control);
+                incoming_count += 1;
+                if incoming_total == incoming_count {
+                    break ;
+                }
             },
             None => {},
         }
@@ -170,3 +249,4 @@ fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count:
     close_clients(&mut clients);
     server.stop().unwrap();
 }
+*/

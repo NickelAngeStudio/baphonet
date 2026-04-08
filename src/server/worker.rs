@@ -25,19 +25,19 @@ SOFTWARE.
 use std::{
     io::{Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
 };
 
 use crate::{
-    MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE, client,
+    MAXIMUM_MESSAGE_SIZE, Message, SIZE_OF_MESSAGE_SIZE,
     server::{
         ClientId, Status,
         channel::WorkerChannel,
         client::{Client, Clients},
         error::ErrorUpdate,
         message::{
-            IncomingMessage, OutgoingMessage, ServerMessage, SupervisorMessage,
-            SupervisorWorkerMessage, WorkerActiveMessage, WorkerInactiveMessage,
+            IncomingMessage, OutgoingMessage, SupervisorMessage, SupervisorWorkerMessage,
+            WorkerActiveMessage, WorkerInactiveMessage,
         },
     },
 };
@@ -150,8 +150,6 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
         // Set as active
         self.listener = Some(listener);
         self.status = Status::Active;
-
-        // Purge any message left
 
         'worker: loop {
             match self.status {
@@ -270,14 +268,14 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     #[inline]
     fn register_incoming_stream(&mut self, client_id: ClientId, tcp_stream: TcpStream) {
         match tcp_stream.peer_addr() {
-            Ok(_) => {
+            Ok(socket) => {
                 let clients = self.clients.clone();
                 let mut client = clients[client_id as usize].lock();
                 match client.as_mut() {
                     Ok(client) => {
                         **client = Some(Client::new(tcp_stream));
                         self.send_message_to_supervisor(SupervisorWorkerMessage::Connected(
-                            client_id,
+                            client_id, socket,
                         ));
                     }
                     Err(_) => todo!(),
@@ -300,7 +298,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                 // Fetch message if any
                 match client.inc_msg_size {
                     Some(size) => match self.get_incoming_message(client, client_id, &mut buffer[..size]) {
-                        Some(incoming) => self.send_incoming_message_to_server(incoming),
+                        Some(incoming) => self.send_incoming_message_to_transceiver(incoming),
                         None => break 'receive,
                     }
                     None => break 'receive,
@@ -435,13 +433,6 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
         }
     }
 
-    /// Handle clearing client stream buffer
-    #[inline]
-    fn handle_worker_clear(&mut self, client_id: ClientId, buffer: &mut Vec<u8>) {
-        let clients = self.clients.clone();
-        get_client_from_id! { self, client, clients, client_id, Self::clear_stream(&mut client.stream, buffer) }
-    }
-
     /// Clear a TcpStream with a buffer.
     #[inline]
     fn clear_stream(stream: &mut TcpStream, buffer: &mut [u8]) {
@@ -537,12 +528,8 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
 
     /// Send an incoming client message to server
     #[inline]
-    fn send_incoming_message_to_server(&mut self, incoming: IncomingMessage<IN>) {
-        match self
-            .channels
-            .sdr_server
-            .send(ServerMessage::Incoming(incoming))
-        {
+    fn send_incoming_message_to_transceiver(&mut self, incoming: IncomingMessage<IN>) {
+        match self.channels.sdr_incoming.send(incoming) {
             Ok(_) => {}
             Err(_) => self.status = Status::End, // Channel lost, kill worker
         }

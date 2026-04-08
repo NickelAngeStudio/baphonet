@@ -43,6 +43,7 @@ pub(crate) mod worker;
 
 pub use client::Client;
 pub use error::ErrorClient;
+pub use error::ErrorTransceiver;
 
 use crate::MAXIMUM_MESSAGE_SIZE;
 

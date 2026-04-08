@@ -207,6 +207,11 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
         let join_wait_duration = Duration::from_millis(MS_JOIN_WAIT_FOR_WORKER);
         let ts = Instant::now();
 
+        match self.channels.sdr_worker.send(WorkerMessage::End) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
+
         'join: loop {
             match self.worker_handle.as_ref() {
                 Some(th) => {

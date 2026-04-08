@@ -149,7 +149,20 @@ pub fn create_server_and_clients<IN: Message + Send + 'static, OUT: Message + Se
 
     let clients = create_connect_clients(client_count, port);
 
-    std::thread::sleep(Duration::from_millis(500));
+    let mut sum_client: usize = 0;
+    // Wait for each client to be connected
+    timeout_loop!(match server.update() {
+        Some(update) => match update {
+            baphonet::server::message::ServerUpdate::ClientConnected(_, _) => {
+                sum_client += 1;
+                if sum_client == client_count {
+                    break;
+                }
+            }
+            _ => {}
+        },
+        None => {}
+    });
 
     (server, clients)
 }

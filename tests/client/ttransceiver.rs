@@ -22,6 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use std::{
+    thread::{self, JoinHandle},
+    time::Duration,
+};
+
+use baphonet::client::{ErrorTransceiver, transceiver::Transceiver};
+
 use crate::{
     shared::{
         CLIENT_SIZE, DISPATCHER_COUNT, WORKER_COUNT, close_clients, compare_client_server_message,
@@ -34,6 +41,9 @@ use crate::{
 
 /// Messages sent by each dispatcher thread
 const MSG_SENT_PER_THREAD: usize = 64;
+const TRANSMITTER_THREAD: usize = 64;
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1000);
 
 #[test]
 fn client_transceiver_same_thread_receive() {
@@ -69,171 +79,255 @@ fn client_transceiver_same_thread_receive() {
 
 #[test]
 fn client_transceiver_diff_thread_receive() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_same_thread_receive_wait() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_diff_thread_receive_wait() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_receive_wait_err_disconnected() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_same_thread_receive_timeout() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_diff_thread_receive_timeout() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_receive_timeout_err_disconnected() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_receive_timeout_err_timeout() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_same_thread_send() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_multi_thread_send() {
-    todo!()
-}
-
-#[test]
-fn client_transceiver_send_err_disconnected() {
-    todo!()
-}
-
-/*
-#[test]
-fn dispatcher_client_create_disconnected() {
-    let (mut _server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
-        CLIENT_SIZE.all,
-        WORKER_COUNT.all,
-    );
-    let mut client = ClientBuilder::new()
-        .build::<ServerToClientMessage, ClientToServerMessage>()
-        .unwrap();
-
-    let mut dispatcher = client.dispatcher();
-    assert_eq!(dispatcher.status(), Status::Disconnected);
-}
-
-#[test]
-fn dispatcher_client_create_connected() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
         ServerToClientMessage,
     >(CLIENT_SIZE.one);
 
-    timeout_loop! {
-        match clients[0].update(){
-            Some(_) => {},
-            None => break,
-        }
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
     }
 
-    let mut dispatcher = clients[0].dispatcher();
-    assert_eq!(dispatcher.status(), Status::Connected);
+    let transceiver = clients[0].transceiver().take().unwrap();
+    let handle = thread::spawn(move || {
+        let control = ServerToClientMessage::control();
+        let mut sum_recv: usize = 0;
+        timeout_loop! {
+            match transceiver.receive() {
+                Some(msg) => {
+                    compare_server_client_message(&control, &msg);
+
+                    sum_recv += 1;
+                    if sum_recv == MSG_SENT_PER_THREAD {
+                        break;
+                    }
+                },
+                None => {},
+            }
+        }
+    });
+
+    handle.join().unwrap();
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_same_thread_receive_wait() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
+    }
+
+    let control = ServerToClientMessage::control();
+    let mut sum_recv: usize = 0;
+    let transceiver = clients[0].transceiver().as_ref().unwrap();
+    timeout_loop! {
+        match transceiver.receive_wait() {
+            Ok(msg) =>{
+                compare_server_client_message(&control, &msg);
+
+                sum_recv += 1;
+                if sum_recv == MSG_SENT_PER_THREAD {
+                    break;
+                }
+            },
+            Err(_) => panic!("Shouldn't Err()!"),
+        }
+    }
 
     close_clients(&mut clients);
     server.stop().unwrap();
 }
 
 #[test]
-fn dispatcher_client_client_send_one() {
-    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.one);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.some);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.one, DISPATCHER_COUNT.all);
-}
-
-#[test]
-fn dispatcher_client_send_some() {
-    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.one);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.some);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.some, DISPATCHER_COUNT.all);
-}
-
-#[test]
-fn dispatcher_client_send_all() {
-    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.one);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.some);
-    dispatcher_client_send_dispatch(CLIENT_SIZE.all, DISPATCHER_COUNT.all);
-}
-
-#[test]
-fn dispatcher_client_error_disconnected() {
-    todo!()
-}
-
-#[test]
-fn dispatcher_client_error_channel_disconnected() {
-    todo!()
-}
-
-#[test]
-fn client_send_error_too_large() {
-    todo!()
-}
-
-fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count: usize) {
+fn client_transceiver_diff_thread_receive_wait() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
         ServerToClientMessage,
-    >(client_count);
+    >(CLIENT_SIZE.one);
 
-    let mut handles = Vec::<JoinHandle<()>>::new();
-    for client in &mut clients {
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
+    }
+
+    let transceiver = clients[0].transceiver().take().unwrap();
+    let handle = thread::spawn(move || {
+        let control = ServerToClientMessage::control();
+        let mut sum_recv: usize = 0;
         timeout_loop! {
-            match client.update(){
-                Some(_) => {},
-                None => break,
+            match transceiver.receive_wait() {
+                Ok(msg) => {
+                    compare_server_client_message(&control, &msg);
+
+                    sum_recv += 1;
+                    if sum_recv == MSG_SENT_PER_THREAD {
+                        break;
+                    }
+                },
+                Err(_) => panic!("Shouldn't err()!"),
             }
         }
+    });
 
-        for _ in 0..dispatcher_client_count {
-            let mut dispatcher = client.dispatcher();
-            let handle = thread::spawn(move || {
-                for _ in 0..MSG_PER_DISPATCHER_THREAD {
-                    dispatcher.send(ClientToServerMessage::control()).unwrap();
+    handle.join().unwrap();
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_receive_wait_err_disconnected() {
+    let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
+
+    {
+        let (mut server, mut clients) = create_server_and_clients_default::<
+            ClientToServerMessage,
+            ServerToClientMessage,
+        >(CLIENT_SIZE.one);
+
+        _trns = Some(clients[0].transceiver().take().unwrap());
+
+        close_clients(&mut clients);
+        server.stop().unwrap();
+    }
+
+    match _trns.as_ref().unwrap().receive_wait() {
+        Ok(_) => panic!("Shouldn't be ok()!"),
+        Err(err) => assert_eq!(err, ErrorTransceiver::ChannelDisconnected),
+    }
+}
+
+#[test]
+fn client_transceiver_same_thread_receive_timeout() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
+    }
+
+    let control = ServerToClientMessage::control();
+    let mut sum_recv: usize = 0;
+    let transceiver = clients[0].transceiver().as_ref().unwrap();
+    timeout_loop! {
+        match transceiver.receive_timeout(DEFAULT_TIMEOUT) {
+            Ok(msg) =>{
+                compare_server_client_message(&control, &msg);
+
+                sum_recv += 1;
+                if sum_recv == MSG_SENT_PER_THREAD {
+                    break;
                 }
-            });
-            handles.push(handle);
+            },
+            Err(_) => panic!("Shouldn't Err()!"),
         }
     }
 
-    let incoming_total: usize = MSG_PER_DISPATCHER_THREAD * dispatcher_client_count * clients.len();
-    let mut incoming_count: usize = 0;
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_diff_thread_receive_timeout() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    for _ in 0..MSG_SENT_PER_THREAD {
+        send_server_message(&mut server, 0, ServerToClientMessage::control());
+    }
+
+    let transceiver = clients[0].transceiver().take().unwrap();
+    let handle = thread::spawn(move || {
+        let control = ServerToClientMessage::control();
+        let mut sum_recv: usize = 0;
+        timeout_loop! {
+            match transceiver.receive_timeout(DEFAULT_TIMEOUT) {
+                Ok(msg) => {
+                    compare_server_client_message(&control, &msg);
+
+                    sum_recv += 1;
+                    if sum_recv == MSG_SENT_PER_THREAD {
+                        break;
+                    }
+                },
+                Err(_) => panic!("Shouldn't err()!"),
+            }
+        }
+    });
+
+    handle.join().unwrap();
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_receive_timeout_err_disconnected() {
+    let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
+
+    {
+        let (mut server, mut clients) = create_server_and_clients_default::<
+            ClientToServerMessage,
+            ServerToClientMessage,
+        >(CLIENT_SIZE.one);
+
+        _trns = Some(clients[0].transceiver().take().unwrap());
+
+        close_clients(&mut clients);
+        server.stop().unwrap();
+    }
+
+    match _trns.as_ref().unwrap().receive_timeout(DEFAULT_TIMEOUT) {
+        Ok(_) => panic!("Shouldn't be ok()!"),
+        Err(err) => assert_eq!(err, ErrorTransceiver::ChannelDisconnected),
+    }
+}
+
+#[test]
+fn client_transceiver_receive_timeout_err_timeout() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    let transceiver = clients[0].transceiver().as_ref().unwrap();
+    match transceiver.receive_timeout(DEFAULT_TIMEOUT) {
+        Ok(_) => panic!("Shouldn't be ok()!"),
+        Err(err) => assert_eq!(err, ErrorTransceiver::Timeout),
+    }
+
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_same_thread_send() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    let transceiver = clients[0].transceiver().take().unwrap();
+    for _ in 0..MSG_SENT_PER_THREAD {
+        transceiver.send(ClientToServerMessage::control()).unwrap();
+    }
+
     let control = ClientToServerMessage::control();
-    println!(
-        "dispatcher_client_send_dispatch C={}, D={}, I={} messages...",
-        client_count, dispatcher_client_count, incoming_total
-    );
-    // Make sure server received messages.
+    let total_msg = MSG_SENT_PER_THREAD;
+    let mut sum_msg: usize = 0;
     timeout_loop! {
-        match server.transceiver().as_ref().unwrap().receive() {
-            Some(incoming) => {
-                compare_client_server_message(&incoming.message, &control);
-                incoming_count += 1;
-                if incoming_total == incoming_count {
+        match server.transceiver().as_mut().unwrap().receive() {
+            Some(msg) => {
+                compare_client_server_message(&control, &msg.message);
+                sum_msg += 1;
+                if sum_msg == total_msg {
                     break ;
                 }
             },
@@ -241,12 +335,122 @@ fn dispatcher_client_send_dispatch(client_count: usize, dispatcher_client_count:
         }
     }
 
-    // Join threads
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_multi_thread_send() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
+
+    let mut handles = Vec::<JoinHandle<()>>::new();
+    let transceiver = clients[0].transceiver().take().unwrap();
+    for _ in 0..TRANSMITTER_THREAD {
+        let transmitter = transceiver.transmitter();
+        handles.push(thread::spawn(move || {
+            for _ in 0..MSG_SENT_PER_THREAD {
+                transmitter.send(ClientToServerMessage::control()).unwrap();
+            }
+        }));
+    }
+
+    // Join all threads
     for handle in handles {
-        handle.join().unwrap()
+        handle.join().unwrap();
+    }
+
+    let control = ClientToServerMessage::control();
+    let total_msg = MSG_SENT_PER_THREAD * TRANSMITTER_THREAD;
+    let mut sum_msg: usize = 0;
+    timeout_loop! {
+        match server.transceiver().as_mut().unwrap().receive() {
+            Some(msg) => {
+                compare_client_server_message(&control, &msg.message);
+                sum_msg += 1;
+                if sum_msg == total_msg {
+                    break ;
+                }
+            },
+            None => {},
+        }
     }
 
     close_clients(&mut clients);
     server.stop().unwrap();
 }
-*/
+
+#[test]
+fn client_transceiver_multi_clients_threads_send() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all);
+
+    let mut handles = Vec::<JoinHandle<()>>::new();
+
+    for client in &mut clients {
+        let transceiver = client.transceiver().take().unwrap();
+
+        for _ in 0..TRANSMITTER_THREAD {
+            let transmitter = transceiver.transmitter();
+            handles.push(thread::spawn(move || {
+                for _ in 0..MSG_SENT_PER_THREAD {
+                    transmitter.send(ClientToServerMessage::control()).unwrap();
+                }
+            }));
+        }
+    }
+
+    // Join all threads
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let control = ClientToServerMessage::control();
+    let total_msg = MSG_SENT_PER_THREAD * TRANSMITTER_THREAD * CLIENT_SIZE.all;
+    let mut sum_msg: usize = 0;
+    timeout_loop! {
+        match server.transceiver().as_mut().unwrap().receive() {
+            Some(msg) => {
+                compare_client_server_message(&control, &msg.message);
+                sum_msg += 1;
+                if sum_msg == total_msg {
+                    break ;
+                }
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop().unwrap();
+}
+
+#[test]
+fn client_transceiver_send_err_disconnected() {
+    let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
+
+    {
+        let (mut server, mut clients) = create_server_and_clients_default::<
+            ClientToServerMessage,
+            ServerToClientMessage,
+        >(CLIENT_SIZE.one);
+
+        _trns = Some(clients[0].transceiver().take().unwrap());
+
+        close_clients(&mut clients);
+        server.stop().unwrap();
+    }
+
+    match _trns
+        .as_ref()
+        .unwrap()
+        .send(ClientToServerMessage::control())
+    {
+        Ok(_) => panic!("Shouldn't be ok()!"),
+        Err(err) => assert_eq!(err, ErrorTransceiver::ChannelDisconnected),
+    }
+}

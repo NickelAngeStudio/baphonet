@@ -25,9 +25,8 @@ SOFTWARE.
 use crate::{
     Message,
     client::{
-        Client, DEFAULT_OUTGOING_SIZE, DEFAULT_POOL_RATE_PER_SECOND, ErrorClient,
-        MAXIMUM_OUTGOING_SIZE, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_OUTGOING_SIZE,
-        MINIMUM_POOL_RATE_PER_SECOND,
+        Client, ErrorClient, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM,
+        POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM, POOL_RATE_PER_SECOND_MINIMUM,
     },
 };
 
@@ -44,8 +43,8 @@ impl ClientBuilder {
     /// Create a new [`ClientBuilder`] instance.
     pub fn new() -> ClientBuilder {
         ClientBuilder {
-            pool_rate: DEFAULT_POOL_RATE_PER_SECOND,
-            outgoing_max_size: DEFAULT_OUTGOING_SIZE,
+            pool_rate: POOL_RATE_PER_SECOND_DEFAULT,
+            outgoing_max_size: OUTGOING_SIZE_DEFAULT,
         }
     }
 
@@ -81,16 +80,16 @@ impl ClientBuilder {
     pub fn build<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
         &self,
     ) -> Result<Client<IN, OUT>, ErrorClient> {
-        if self.pool_rate < MINIMUM_POOL_RATE_PER_SECOND {
+        if self.pool_rate < POOL_RATE_PER_SECOND_MINIMUM {
             return Err(ErrorClient::PoolRateBelowMinimum);
         }
-        if self.pool_rate > MAXIMUM_POOL_RATE_PER_SECOND {
+        if self.pool_rate > POOL_RATE_PER_SECOND_MAXIMUM {
             return Err(ErrorClient::PoolRateAboveMaximum);
         }
-        if self.outgoing_max_size < MINIMUM_OUTGOING_SIZE {
+        if self.outgoing_max_size < OUTGOING_SIZE_MINIMUM {
             return Err(ErrorClient::OutgoingMessageSizeBelowMinimum);
         }
-        if self.outgoing_max_size > MAXIMUM_OUTGOING_SIZE {
+        if self.outgoing_max_size > OUTGOING_SIZE_MAXIMUM {
             return Err(ErrorClient::OutgoingMessageSizeAboveMaximum);
         }
 
@@ -103,9 +102,9 @@ mod tests {
     use crate::{
         Message,
         client::{
-            Client, DEFAULT_OUTGOING_SIZE, DEFAULT_POOL_RATE_PER_SECOND, ErrorClient,
-            MAXIMUM_OUTGOING_SIZE, MAXIMUM_POOL_RATE_PER_SECOND, MINIMUM_OUTGOING_SIZE,
-            MINIMUM_POOL_RATE_PER_SECOND, builder::ClientBuilder,
+            ErrorClient, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM,
+            POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM,
+            POOL_RATE_PER_SECOND_MINIMUM, builder::ClientBuilder,
         },
     };
 
@@ -124,40 +123,29 @@ mod tests {
         }
     }
 
-    /// Assert a client parameters from a builder
-    fn assert_client_builder<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
-        client: &Client<IN, OUT>,
-        builder: &ClientBuilder,
-    ) {
-        assert_eq!(client.pool_rate, builder.pool_rate);
-        assert_eq!(client.outgoing_max_size, builder.outgoing_max_size);
-    }
-
     #[test]
     fn client_builder_new_default() {
         let builder = ClientBuilder::new();
-        assert_eq!(builder.pool_rate, DEFAULT_POOL_RATE_PER_SECOND);
-        assert_eq!(builder.outgoing_max_size, DEFAULT_OUTGOING_SIZE);
-        let client = builder.build::<TestMessage, TestMessage>().unwrap();
-        assert_client_builder(&client, &builder);
+        assert_eq!(builder.pool_rate, POOL_RATE_PER_SECOND_DEFAULT);
+        assert_eq!(builder.outgoing_max_size, OUTGOING_SIZE_DEFAULT);
+        let _client = builder.build::<TestMessage, TestMessage>().unwrap();
     }
 
     #[test]
     fn client_builder_new_modified() {
-        let pool_rate = MINIMUM_POOL_RATE_PER_SECOND + 1;
-        let outgoing_max_size = MINIMUM_OUTGOING_SIZE + 1;
+        let pool_rate = POOL_RATE_PER_SECOND_MINIMUM + 1;
+        let outgoing_max_size = OUTGOING_SIZE_MINIMUM + 1;
         let builder = ClientBuilder::new()
             .pool_rate(pool_rate)
             .outgoing_max_size(outgoing_max_size);
         assert_eq!(builder.pool_rate, pool_rate);
         assert_eq!(builder.outgoing_max_size, outgoing_max_size);
-        let client = builder.build::<TestMessage, TestMessage>().unwrap();
-        assert_client_builder(&client, &builder);
+        let _client = builder.build::<TestMessage, TestMessage>().unwrap();
     }
 
     #[test]
     fn client_builder_err_poolrate_below_min() {
-        let builder = ClientBuilder::new().pool_rate(MINIMUM_POOL_RATE_PER_SECOND - 1);
+        let builder = ClientBuilder::new().pool_rate(POOL_RATE_PER_SECOND_MINIMUM - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorClient::PoolRateBelowMinimum),
@@ -166,7 +154,7 @@ mod tests {
 
     #[test]
     fn client_builder_err_poolrate_above_max() {
-        let builder = ClientBuilder::new().pool_rate(MAXIMUM_POOL_RATE_PER_SECOND + 1);
+        let builder = ClientBuilder::new().pool_rate(POOL_RATE_PER_SECOND_MAXIMUM + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorClient::PoolRateAboveMaximum),
@@ -175,7 +163,7 @@ mod tests {
 
     #[test]
     fn client_builder_err_outgoing_max_below_min() {
-        let builder = ClientBuilder::new().outgoing_max_size(MINIMUM_OUTGOING_SIZE - 1);
+        let builder = ClientBuilder::new().outgoing_max_size(OUTGOING_SIZE_MINIMUM - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorClient::OutgoingMessageSizeBelowMinimum),
@@ -184,7 +172,7 @@ mod tests {
 
     #[test]
     fn client_builder_err_outgoing_max_above_max() {
-        let builder = ClientBuilder::new().outgoing_max_size(MAXIMUM_OUTGOING_SIZE + 1);
+        let builder = ClientBuilder::new().outgoing_max_size(OUTGOING_SIZE_MAXIMUM + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorClient::OutgoingMessageSizeAboveMaximum),

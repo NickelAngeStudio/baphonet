@@ -157,7 +157,7 @@ impl ServerBuilder {
 mod tests {
     use crate::{
         Message,
-        client::MAXIMUM_POOL_RATE_PER_SECOND,
+        client::POOL_RATE_PER_SECOND_MAXIMUM,
         server::{
             DEFAULT_INCOMING_SIZE, DEFAULT_MAXIMUM_CLIENT, DEFAULT_POOL_RATE_PER_SECOND,
             DEFAULT_WORKER_COUNT, MAXIMUM_CLIENT, MAXIMUM_INCOMING_SIZE, MINIMUM_CLIENT,
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_poolrate_above_max() {
-        let builder = ServerBuilder::new().pool_rate(MAXIMUM_POOL_RATE_PER_SECOND + 1);
+        let builder = ServerBuilder::new().pool_rate(POOL_RATE_PER_SECOND_MAXIMUM + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::PoolRateAboveMaximum),

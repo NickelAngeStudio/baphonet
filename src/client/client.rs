@@ -55,12 +55,6 @@ pub struct Client<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
 
     /// Current status of the client
     pub(super) status: Status,
-
-    /// Worker pool rate
-    pub(super) pool_rate: u64,
-
-    /// Maximum size of outgoing message
-    pub(super) outgoing_max_size: usize,
 }
 
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT> {
@@ -82,8 +76,6 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
             channels: client_channels,
             worker_handle,
             status: Status::Disconnected,
-            pool_rate: builder.pool_rate,
-            outgoing_max_size: builder.outgoing_max_size,
         }
     }
 

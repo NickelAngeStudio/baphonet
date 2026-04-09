@@ -69,7 +69,7 @@ fn server_clients_err_inactive() {
         Err(err) => assert_eq!(err, ErrorServer::Inactive),
     }
 
-    server.stop().unwrap();
+    server.stop();
 }
 
 fn test_server_clients(client_count: usize) {
@@ -150,5 +150,5 @@ fn test_server_clients(client_count: usize) {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap()
+    server.stop();
 }

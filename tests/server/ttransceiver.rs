@@ -81,7 +81,7 @@ fn server_transceiver_same_thread_receive() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]

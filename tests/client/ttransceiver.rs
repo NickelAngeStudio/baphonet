@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use std::{
     thread::{self, JoinHandle},
@@ -74,7 +72,7 @@ fn client_transceiver_same_thread_receive() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -109,7 +107,7 @@ fn client_transceiver_diff_thread_receive() {
 
     handle.join().unwrap();
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -141,7 +139,7 @@ fn client_transceiver_same_thread_receive_wait() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -176,7 +174,7 @@ fn client_transceiver_diff_thread_receive_wait() {
 
     handle.join().unwrap();
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -192,7 +190,7 @@ fn client_transceiver_receive_wait_err_disconnected() {
         _trns = Some(clients[0].transceiver().take().unwrap());
 
         close_clients(&mut clients);
-        server.stop().unwrap();
+        server.stop();
     }
 
     match _trns.as_ref().unwrap().receive_wait() {
@@ -230,7 +228,7 @@ fn client_transceiver_same_thread_receive_timeout() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -265,7 +263,7 @@ fn client_transceiver_diff_thread_receive_timeout() {
 
     handle.join().unwrap();
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -281,7 +279,7 @@ fn client_transceiver_receive_timeout_err_disconnected() {
         _trns = Some(clients[0].transceiver().take().unwrap());
 
         close_clients(&mut clients);
-        server.stop().unwrap();
+        server.stop();
     }
 
     match _trns.as_ref().unwrap().receive_timeout(DEFAULT_TIMEOUT) {
@@ -304,7 +302,7 @@ fn client_transceiver_receive_timeout_err_timeout() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -336,7 +334,7 @@ fn client_transceiver_same_thread_send() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -379,7 +377,7 @@ fn client_transceiver_multi_thread_send() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -426,7 +424,7 @@ fn client_transceiver_multi_clients_threads_send() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -442,7 +440,7 @@ fn client_transceiver_send_err_disconnected() {
         _trns = Some(clients[0].transceiver().take().unwrap());
 
         close_clients(&mut clients);
-        server.stop().unwrap();
+        server.stop();
     }
 
     match _trns

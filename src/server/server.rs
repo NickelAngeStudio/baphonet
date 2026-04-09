@@ -213,14 +213,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
 
     /// Stop the server, disconnecting all clients.
     /// Stop should ALWAYS be called before closing program.
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if stop was sent to thread.
-    ///     - Err([`ErrorServer::ServerStopTimeout`]) if server took too much time to shutdown.
-    ///     - Err([`ErrorServer::ServerStopJoinError`]) if thread join resulted in error.
-    ///     - Err([`ErrorServer::ServerStopUnexpectedError`]) if unexpected error happened.
-    pub fn stop(&mut self) -> Result<(), ErrorServer> {
+    pub fn stop(&mut self) {
         match self
             .channels
             .sdr_supervisor
@@ -228,8 +221,6 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
         {
             Ok(_) => {
                 self.status = Status::Stopping;
-                Ok(())
-                //self.join_threads_timeout()
             }
             Err(_) => todo!(), // TODO: Handle channel lost #13
         }

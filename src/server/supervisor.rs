@@ -196,8 +196,40 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
             self.send_message_to_worker(WorkerActiveMessage::Stop);
         }
 
-        // Tell servr currently inactive
+        // Clear all clients
+        self.clear_clients();
+
+        // Remove listener
+        self.listener = None;
+
+        // Tell server currently inactive
         self.send_update_to_server(ServerUpdate::Inactive);
+    }
+
+    /// Close clients stream connection and purge the list
+    #[inline]
+    fn clear_clients(&mut self) {
+        let clients = self.clients.clone();
+        for client_id in 0..clients.len() {
+            match clients[client_id].lock() {
+                Ok(mut client) => {
+                    match client.take() {
+                        Some(client) => {
+                            // Close stream
+                            match client.stream.shutdown(std::net::Shutdown::Both) {
+                                Ok(_) => {}
+                                Err(_) => {}
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                Err(_) => todo!(), // TODO: Handle lock error
+            }
+
+            // Remove task
+            self.tasks.reception[client_id] = None;
+        }
     }
 
     /// Purge worker receive channel of any leftover message before

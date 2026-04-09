@@ -157,6 +157,9 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                 _ => break 'worker,
             }
         }
+
+        // Remove reference to listener
+        self.listener = None;
     }
 
     /// Handle worker active routine

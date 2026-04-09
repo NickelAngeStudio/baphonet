@@ -39,3 +39,6 @@ mod ttransceiver;
 
 /// Tests for Server:close_connection()
 mod tclose;
+
+/// Server stress test
+mod tstress;

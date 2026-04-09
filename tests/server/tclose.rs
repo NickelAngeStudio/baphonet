@@ -73,7 +73,7 @@ fn server_close_connection_err_inactive() {
         Err(err) => assert_eq!(err, ErrorServer::Inactive),
     }
 
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn server_close_connection_err_not_found() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 /// Close connections to clients
@@ -152,7 +152,7 @@ fn server_close_connection_ok_client(worker_count: usize, client_count: usize) {
         assert_eq!(client.status(), Status::Disconnected);
     }
 
-    server.stop().unwrap();
+    server.stop();
 }
 
 /// Returns true if all client are disconnected

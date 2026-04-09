@@ -25,39 +25,66 @@ SOFTWARE.
 #[doc(hidden)]
 pub mod client;
 
+#[doc(hidden)]
 pub mod builder;
 
+#[doc(hidden)]
+pub mod transceiver;
+
+#[doc(hidden)]
+pub mod transmitter;
+
+#[doc(hidden)]
 pub mod status;
 
 #[doc(hidden)]
 pub mod error;
 
+#[doc(hidden)]
 pub mod channel;
 
+#[doc(hidden)]
 pub mod message;
 
+#[doc(hidden)]
 pub(crate) mod worker;
 
+pub use builder::ClientBuilder;
 pub use client::Client;
 pub use error::ErrorClient;
+pub use error::ErrorTransceiver;
+pub use error::ErrorWorker;
+pub use message::ClientUpdate;
+pub use status::Status as ClientStatus;
+pub use transceiver::Transceiver;
+pub use transmitter::Transmitter;
 
 use crate::MAXIMUM_MESSAGE_SIZE;
 
-/// Minimum size of outgoing message.
-pub const MINIMUM_OUTGOING_SIZE: usize = 1;
+/// Minimum size of incoming message.
+pub const INCOMING_SIZE_MINIMUM: usize = 1;
 
-/// Default maximum size of outgoing message. (1KB)
-pub const DEFAULT_OUTGOING_SIZE: usize = 1024;
+/// Default maximum size of incoming message. (64KB)
+pub const INCOMING_SIZE_DEFAULT: usize = MAXIMUM_MESSAGE_SIZE;
 
 /// Maximum size of incoming message.
-pub const MAXIMUM_OUTGOING_SIZE: usize = MAXIMUM_MESSAGE_SIZE;
+pub const INCOMING_SIZE_MAXIMUM: usize = MAXIMUM_MESSAGE_SIZE;
+
+/// Minimum size of outgoing message.
+pub const OUTGOING_SIZE_MINIMUM: usize = 1;
+
+/// Default maximum size of outgoing message. (1KB)
+pub const OUTGOING_SIZE_DEFAULT: usize = 1024;
+
+/// Maximum size of incoming message.
+pub const OUTGOING_SIZE_MAXIMUM: usize = MAXIMUM_MESSAGE_SIZE;
 
 /// Default pool rate of the client worker per second
 /// used to receive message from server.
-pub const DEFAULT_POOL_RATE_PER_SECOND: u64 = 30;
+pub const POOL_RATE_PER_SECOND_DEFAULT: u64 = 30;
 
 /// Minimum pool rate that can be set.
-pub const MINIMUM_POOL_RATE_PER_SECOND: u64 = 1;
+pub const POOL_RATE_PER_SECOND_MINIMUM: u64 = 1;
 
 /// Maximum pool rate that can be set.
-pub const MAXIMUM_POOL_RATE_PER_SECOND: u64 = 1000;
+pub const POOL_RATE_PER_SECOND_MAXIMUM: u64 = 1000;

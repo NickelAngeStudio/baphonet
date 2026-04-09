@@ -25,10 +25,11 @@ SOFTWARE.
 use std::{thread, time::Duration};
 
 use baphonet::{
-    client::status::ClientStatus,
+    client::status::Status,
     server::{
-        ClientId, ErrorServer, ErrorUpdate, Server, ServerBuilder,
-        message::{ServerMessage, SupervisorUpdate},
+        ClientId, ServerBuilder,
+        error::{ErrorServer, ErrorUpdate},
+        message::ServerUpdate,
     },
 };
 
@@ -69,10 +70,10 @@ fn server_close_connection_err_inactive() {
 
     match server.close_connection(0) {
         Ok(_) => panic!("Shouldn't be Ok()!"),
-        Err(err) => assert_eq!(err, ErrorServer::ServerInactive),
+        Err(err) => assert_eq!(err, ErrorServer::Inactive),
     }
 
-    server.stop().unwrap();
+    server.stop();
 }
 
 #[test]
@@ -86,15 +87,12 @@ fn server_close_connection_err_not_found() {
     server.close_connection(invalid_client_id).unwrap();
 
     timeout_loop! {
-        match server.message() {
+        match server.update() {
             Some(msg) => match msg {
-                ServerMessage::Update(supervisor_update) => match supervisor_update {
-                    SupervisorUpdate::Error(error_update) => match error_update{
-                        ErrorUpdate::ClientNotFound(client_id) => {
-                            assert_eq!(client_id, invalid_client_id);
-                            break;
-                        },
-                        _ => {},
+                ServerUpdate::Error(error_update) => match error_update{
+                    ErrorUpdate::ClientNotFound(client_id) => {
+                        assert_eq!(client_id, invalid_client_id);
+                        break;
                     },
                     _ => {},
                 },
@@ -105,7 +103,7 @@ fn server_close_connection_err_not_found() {
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
 }
 
 /// Close connections to clients
@@ -123,16 +121,12 @@ fn server_close_connection_ok_client(worker_count: usize, client_count: usize) {
     client_disconnected.resize(client_count, false);
 
     timeout_loop! {
-        match server.message() {
-            Some(msg) => match msg {
-                ServerMessage::Update(update) => match update{
-                    SupervisorUpdate::ClientDisconnected(client_id) => {
-                        client_disconnected[client_id as usize] = true;
-                    },
-                    _ => {}
-
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::ClientDisconnected(client_id) => {
+                    client_disconnected[client_id as usize] = true;
                 },
-                _ => {}
+                _ => {},
             },
             None => {},
         }
@@ -148,17 +142,17 @@ fn server_close_connection_ok_client(worker_count: usize, client_count: usize) {
     for client in &mut clients {
         'message:   // Fetch client message to update
         loop {
-            match client.message(){
+            match client.update(){
                 Some(_) => {},
                 None => break 'message,
             }
         }
 
         // All client should be disconnected
-        assert_eq!(client.status(), ClientStatus::Disconnected);
+        assert_eq!(client.status(), Status::Disconnected);
     }
 
-    server.stop().unwrap();
+    server.stop();
 }
 
 /// Returns true if all client are disconnected

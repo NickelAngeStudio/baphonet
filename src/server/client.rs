@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,7 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{net::{SocketAddr, TcpStream}, sync::{Arc, Mutex}};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    sync::{Arc, Mutex},
+};
 
 use crate::server::ClientId;
 
@@ -31,23 +34,46 @@ pub(crate) type Clients = Arc<Vec<Mutex<Option<Client>>>>;
 
 /// Client of the server
 pub(crate) struct Client {
-
     /// TcpStream used to communicate with client
-    pub stream : TcpStream,
+    pub stream: TcpStream,
 
     /// Incoming message size if any
-    pub inc_msg_size : Option<usize>,
-
+    pub inc_msg_size: Option<usize>,
 }
 
 impl Client {
-    pub fn new(stream : TcpStream) -> Client {
-        Client { stream, inc_msg_size:None }
+    pub fn new(stream: TcpStream) -> Client {
+        Client {
+            stream,
+            inc_msg_size: None,
+        }
     }
 }
 
 /// A client of the server given from [`Server::clients()`](super::Server::clients());
 pub struct ServerClient {
-    client_id : ClientId,
-    addr : SocketAddr,
+    client_id: ClientId,
+    addr: SocketAddr,
+}
+
+impl ServerClient {
+    /// Create a [`ServerClient`] entry from [`Client`].
+    pub(crate) fn from_client(client_id: ClientId, client: &Client) -> ServerClient {
+        let addr = match client.stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+        };
+
+        ServerClient { client_id, addr }
+    }
+
+    /// Get the client_id of client
+    pub fn client_id(&self) -> u16 {
+        self.client_id
+    }
+
+    /// Get the IP address of the client.
+    pub fn addr(&self) -> SocketAddr {
+        self.addr
+    }
 }

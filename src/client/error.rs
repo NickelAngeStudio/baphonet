@@ -52,10 +52,16 @@ pub enum ErrorClient {
     /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
     PoolRateAboveMaximum,
 
-    /// Incoming message size is below [`MINIMUM_OUTGOING_SIZE`].
+    /// Incoming message size is below [`INCOMING_SIZE_MINIMUM`].
+    IncomingMessageSizeBelowMinimum,
+
+    /// Incoming message size is above [`INCOMING_SIZE_MAXIMUM`].
+    IncomingMessageSizeAboveMaximum,
+
+    /// Outgoing message size is below [`OUTGOING_SIZE_MINIMUM`].
     OutgoingMessageSizeBelowMinimum,
 
-    /// Incoming message size is above [`MAXIMUM_OUTGOING_SIZE`].
+    /// Outgoing message size is above [`OUTGOING_SIZE_MAXIMUM`].
     OutgoingMessageSizeAboveMaximum,
 
     /// Error happened while trying to join worker thread
@@ -64,13 +70,24 @@ pub enum ErrorClient {
     /// Client took too much time closing connection.
     CloseTimeout,
 }
+
+/// Error given by the [`Dispatcher`].
+#[derive(Debug, PartialEq, Clone)]
+pub enum ErrorTransceiver {
+    /// Transceiver is disconnected from the client. (client dropped)
+    ChannelDisconnected,
+
+    /// Transceiver::receive_timeout() has expired.
+    Timeout,
+}
+
 /// Possible [`Worker`](super::Worker) error
 #[derive(Debug, PartialEq)]
 pub enum ErrorWorker {
     /// Outgoing message serialize failed
     OutgoingSerializeError,
 
-    /// Outgoing message is larger than [`MAXIMUM_MESSAGE_SIZE`](super::super::MAXIMUM_MESSAGE_SIZE).
+    /// Outgoing message is larger than [`MAXIMUM_OUTGOING_SIZE`](super::super::MAXIMUM_OUTGOING_SIZE).
     OutgoingMessageTooLarge,
 
     /// Connection to server lost
@@ -80,5 +97,5 @@ pub enum ErrorWorker {
     IncomingMessageTooLarge,
 
     /// An error occured while deserializing incoming message
-    IncomingMessageError,
+    IncomingMessageDeserializeError,
 }

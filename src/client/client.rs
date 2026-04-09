@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 use std::{
-    net::SocketAddr,
+    net::{SocketAddr, TcpStream},
     thread::JoinHandle,
     time::{Duration, Instant},
 };
@@ -31,11 +31,13 @@ use std::{
 use crate::{
     Message,
     client::{
-        DEFAULT_POOL_RATE_PER_SECOND, ErrorClient, MAXIMUM_POOL_RATE_PER_SECOND,
-        MINIMUM_POOL_RATE_PER_SECOND,
-        channel::{self, ClientChannel, create_client_worker_channels},
-        message::{ClientMessage, WorkerMessage},
-        status::{ClientStatus, WorkerStatus},
+        ErrorClient,
+        builder::ClientBuilder,
+        channel::ClientChannel,
+        error::ErrorWorker,
+        message::{ClientUpdate, WorkerMessage},
+        status::Status,
+        transceiver::Transceiver,
         worker::Worker,
     },
 };
@@ -46,22 +48,38 @@ const MS_JOIN_WAIT_FOR_WORKER: u64 = 100;
 /// Client that connect to a Server
 pub struct Client<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Thread communication channels
-    pub(super) channels: Option<ClientChannel<IN, OUT>>,
+    pub(super) channels: ClientChannel<IN, OUT>,
 
     /// Handle of the worker thread
     pub(super) worker_handle: Option<JoinHandle<()>>,
 
     /// Current status of the client
-    pub(super) status: ClientStatus,
-
-    /// Worker pool rate
-    pub(super) pool_rate: u64,
-
-    /// Maximum size of outgoing message
-    pub(super) outgoing_max_size: usize,
+    pub(super) status: Status,
 }
 
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT> {
+    /// Create a new client from builder.
+    pub(crate) fn build(builder: &ClientBuilder) -> Client<IN, OUT> {
+        let (client_channels, worker_channels) = ClientChannel::create_client_worker_channels();
+
+        let mut worker = Worker::new(
+            builder.incoming_max_size,
+            builder.outgoing_max_size,
+            builder.pool_rate,
+            worker_channels,
+        );
+
+        let worker_handle = Some(std::thread::spawn(move || {
+            worker.execute();
+        }));
+
+        Client {
+            channels: client_channels,
+            worker_handle,
+            status: Status::Disconnected,
+        }
+    }
+
     /// Connect the client to [`Server`](crate::server::Server) from a [`SocketAddr`].
     ///
     /// # Returns
@@ -73,118 +91,119 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
     ///     - Err([`ErrorClient::ConnectionRefused`]) if server refused client connection.
     pub fn connect(&mut self, addr: SocketAddr) -> Result<(), ErrorClient> {
         match self.status {
-            ClientStatus::Disconnected => {
-                // Create channels
-                let (client_channels, worker_channels) = create_client_worker_channels::<IN, OUT>();
-
-                match Worker::new(
-                    addr,
-                    self.outgoing_max_size,
-                    self.pool_rate,
-                    worker_channels,
-                ) {
-                    Ok(mut worker) => {
-                        self.channels = Some(client_channels);
-                        self.status = ClientStatus::Connecting;
-                        self.worker_handle = Some(std::thread::spawn(move || {
-                            worker.execute();
-                        }));
-
-                        Ok(())
+            Status::Disconnected => match Self::open_connection(addr) {
+                Ok(stream) => {
+                    self.status = Status::Connecting;
+                    match self
+                        .channels
+                        .sdr_worker
+                        .send(WorkerMessage::Connect(stream))
+                    {
+                        Ok(_) => Ok(()),
+                        Err(_) => Err(ErrorClient::UnexpectedError),
                     }
-                    Err(err) => Err(err),
                 }
-            }
+                Err(err) => Err(err),
+            },
             _ => Err(ErrorClient::AlreadyConnected),
         }
     }
 
-    /// Get incoming sever message and/or worker update.
+    /// Get incoming client worker update.
     ///
     /// Returns :
     /// - [`Result`]:
-    ///     - Some([`ClientMessage`]) if message found.
-    ///     - None if no message found.
-    pub fn message(&mut self) -> Option<ClientMessage<IN>> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.rcv_client.try_recv() {
-                Ok(message) => {
-                    match &message {
-                        ClientMessage::StatusChanged(worker_status) => match worker_status {
-                            WorkerStatus::Active => self.status = ClientStatus::Connected,
-                            WorkerStatus::Ended => {
-                                if self.channels.is_some() {
-                                    self.close().unwrap(); // Close connection since error occurred for worker to ended before close().
-                                }
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                    Some(message)
-                }
-                Err(_) => None,
-            },
-            None => None,
+    ///     - Some([`ClientMessage`]) if update found.
+    ///     - None if no update found.
+    pub fn update(&mut self) -> Option<ClientUpdate> {
+        match self.channels.rcv_update.try_recv() {
+            Ok(update) => self.handle_client_update(update),
+            Err(_) => None,
         }
     }
 
-    /// Send outgoing message to server.
+    // Returns the transceiver used to receive and send message.
     ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if message was sent.
-    ///     - Err([`ErrorClient::Disconnected`]) if client is not connected.
-    ///     - Err([`ErrorClient::UnexpectedError`]) if channel was lost or unable to contact worker.
-    pub fn send(&mut self, message: OUT) -> Result<(), ErrorClient> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.sdr_worker.send(WorkerMessage::Send(message)) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(ErrorClient::UnexpectedError),
-            },
-            None => Err(ErrorClient::Disconnected),
-        }
+    /// The transceiver ownership can be taken with Take() to move
+    /// to another thread.
+    pub fn transceiver(&mut self) -> &mut Option<Transceiver<IN, OUT>> {
+        &mut self.channels.transceiver
     }
 
-    /// Close the connection to the server and join worker thread.
+    /// Close the connection to the server.
     ///
     /// Close should ALWAYS be called before closing program.
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if close was successful.
-    ///     - Err([`ErrorClient::ClientCloseJoinError`]) if client took too much time to shutdown.
-    ///     - Err([`ErrorClient::ClientCloseUnexpectedError`]) if thread join resulted in error.
-    ///     - Err([`ErrorClient::ClientCloseTimeout`]) if unexpected error happened.
-    pub fn close(&mut self) -> Result<(), ErrorClient> {
-        match self.channels.as_mut() {
-            Some(channels) => match channels.sdr_worker.send(WorkerMessage::Stop) {
-                _ => {
-                    self.status = ClientStatus::Disconnecting;
-                    self.join_thread_timeout()
-                }
-            },
-            None => Ok(()), // Server already stopped
+    pub fn close(&mut self) {
+        match self.channels.sdr_worker.send(WorkerMessage::Stop) {
+            Ok(_) => {}
+            Err(_) => {}
         }
+        self.status = Status::Disconnecting;
     }
 
     /// Get status of the client
-    pub fn status(&self) -> ClientStatus {
+    pub fn status(&self) -> Status {
         self.status
     }
 
-    /// Shutdown worker threads
-    ///
-    /// Returns :
-    /// - [`Result`]:
-    ///     - Ok(()) if close was successful.
-    ///     - Err([`ErrorClient::ClientCloseJoinError`]) if client took too much time to shutdown.
-    ///     - Err([`ErrorClient::ClientCloseUnexpectedError`]) if thread join resulted in error.
-    ///     - Err([`ErrorClient::ClientCloseTimeout`]) if unexpected error happened.
+    /// Open connection to [`SocketAddr`]
+    fn open_connection(addr: SocketAddr) -> Result<TcpStream, ErrorClient> {
+        match TcpStream::connect(addr) {
+            Ok(stream) => match stream.set_nonblocking(true) {
+                Ok(_) => match stream.set_nodelay(true) {
+                    Ok(_) => Ok(stream),
+                    Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
+                },
+                Err(err) => Err(ErrorClient::UnhandledIOError(err.kind())),
+            },
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
+                    Err(ErrorClient::InvalidSocket)
+                }
+
+                std::io::ErrorKind::HostUnreachable
+                | std::io::ErrorKind::NetworkUnreachable
+                | std::io::ErrorKind::NotFound
+                | std::io::ErrorKind::AddrNotAvailable
+                | std::io::ErrorKind::NetworkDown => Err(ErrorClient::ServerNotFound),
+
+                std::io::ErrorKind::PermissionDenied
+                | std::io::ErrorKind::ConnectionRefused
+                | std::io::ErrorKind::ConnectionReset
+                | std::io::ErrorKind::ConnectionAborted
+                | std::io::ErrorKind::NotConnected => Err(ErrorClient::ConnectionRefused),
+
+                _ => Err(ErrorClient::UnhandledIOError(err.kind())),
+            },
+        }
+    }
+
+    /// Handle client update and change status accordingly
     #[inline]
-    fn join_thread_timeout(&mut self) -> Result<(), ErrorClient> {
+    fn handle_client_update(&mut self, update: ClientUpdate) -> Option<ClientUpdate> {
+        match &update {
+            ClientUpdate::Connected => self.status = Status::Connected,
+            ClientUpdate::Error(error_worker) => match error_worker {
+                ErrorWorker::ConnectionLost => self.close(),
+                _ => {}
+            },
+            ClientUpdate::Disconnected => self.status = Status::Disconnected,
+            _ => {}
+        }
+
+        Some(update)
+    }
+
+    /// Join worker thread
+    #[inline]
+    fn join_worker_thread(&mut self) {
         let join_wait_duration = Duration::from_millis(MS_JOIN_WAIT_FOR_WORKER);
         let ts = Instant::now();
+
+        match self.channels.sdr_worker.send(WorkerMessage::End) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
 
         'join: loop {
             match self.worker_handle.as_ref() {
@@ -196,35 +215,46 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
                                 Ok(_) => {
                                     break 'join;
                                 }
-                                Err(_) => return Err(ErrorClient::CloseJoinError),
+                                Err(_) => {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("join_worker_thread : Join Error!");
+                                }
                             },
-                            None => return Err(ErrorClient::UnexpectedError), // Should never happens
+                            None => {
+                                #[cfg(debug_assertions)]
+                                eprintln!("join_worker_thread : Unexpected Error!");
+                            } // Should never happens
                         };
                     }
                 }
-                None => return Err(ErrorClient::UnexpectedError), // Should never happens
+                None => {
+                    #[cfg(debug_assertions)]
+                    eprintln!("join_worker_thread : Unexpected Error!");
+                } // Should never happens
             }
 
             if ts.elapsed() > join_wait_duration {
-                // Join took too long
-                return Err(ErrorClient::CloseTimeout);
+                #[cfg(debug_assertions)]
+                eprintln!("join_worker_thread : Timeout!");
+
+                break 'join;
             }
         }
 
-        // Remove channels
-        self.channels = None;
-        self.status = ClientStatus::Disconnected;
-        Ok(())
+        self.status = Status::Ended;
     }
 }
 
 /// Drop implemented only for Debug. Will warn of client not closing connection properly.
-#[cfg(debug_assertions)]
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Drop for Client<IN, OUT> {
     fn drop(&mut self) {
-        match self.channels.as_mut() {
-            Some(_) => eprintln!("Client::close() should be called before program end!"),
-            None => {}
+        match self.status {
+            Status::Disconnecting | Status::Disconnected => {}
+            _ => {
+                #[cfg(debug_assertions)]
+                eprintln!("Client::close() should be called before program end!")
+            }
         }
+        self.join_worker_thread();
     }
 }

@@ -1,5 +1,5 @@
-/* 
-Copyright (c) 2026  NickelAnge.Studio 
+/*
+Copyright (c) 2026  NickelAnge.Studio
 Email               mathieu.grenier@nickelange.studio
 Git                 https://github.com/NickelAngeStudio/baphonet
 
@@ -22,51 +22,51 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
-use crate::shared::{CLIENT_SIZE, close_clients, create_server_and_clients_default, message::{ClientToServerMessage, ServerToClientMessage}};
-
+use crate::shared::{
+    CLIENT_SIZE, close_clients, create_server_and_clients_default,
+    message::{ClientToServerMessage, ServerToClientMessage},
+};
 
 #[test]
 fn server_stop_ok_client_none() {
-    let (mut server, mut clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.none);
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.none);
 
     close_clients(&mut clients);
-    match server.stop() {
-        Ok(_) => {},
-        Err(err) => panic!("Shouldn't be err({:?})", err),
-    }
+    server.stop();
 }
 
 #[test]
 fn server_stop_ok_client_one() {
-    let (mut server, mut clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.one);
-
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.one);
 
     close_clients(&mut clients);
-    match server.stop() {
-        Ok(_) => {},
-        Err(err) => panic!("Shouldn't be err({:?})", err),
-    }
+    server.stop();
 }
 
 #[test]
 fn server_stop_ok_client_some() {
-    let (mut server, mut clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.some);
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.some);
 
     close_clients(&mut clients);
-    match server.stop() {
-        Ok(_) => {},
-        Err(err) => panic!("Shouldn't be err({:?})", err),
-    }
+    server.stop();
 }
 
 #[test]
 fn server_stop_ok_client_all() {
-    let (mut server, mut clients) = create_server_and_clients_default::<ClientToServerMessage, ServerToClientMessage>(CLIENT_SIZE.all);
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all);
 
     close_clients(&mut clients);
-    match server.stop() {
-        Ok(_) => {},
-        Err(err) => panic!("Shouldn't be err({:?})", err),
-    }
+    server.stop();
 }

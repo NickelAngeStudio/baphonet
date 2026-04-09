@@ -31,14 +31,14 @@ mod tstop;
 /// Tests for Server::clients()
 mod tclients;
 
-/// Tests for Server::message()
-mod tmessage;
+/// Tests for Server::update()
+//mod tupdate;
+
+/// Tests for Server::transceiver()s
+mod ttransceiver;
 
 /// Tests for Server:close_connection()
 mod tclose;
 
-/// Tests for Server::send()
-mod tsend;
-
-/// Tests for Server::pause()
-mod tpause;
+/// Server stress test
+mod tstress;

@@ -24,7 +24,10 @@ SOFTWARE.
 
 use std::{
     net::{SocketAddr, TcpListener},
-    sync::{Arc, Mutex, mpsc::RecvTimeoutError},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, RecvTimeoutError, Sender},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -32,14 +35,15 @@ use std::{
 use crate::{
     Message,
     server::{
-        ClientId, ErrorServer, ErrorUpdate,
+        ClientId,
         channel::{SupervisorChannel, WorkerChannel},
         client::Clients,
+        error::ErrorUpdate,
         message::{
-            ServerMessage, SupervisorMessage, SupervisorServerMessage, SupervisorUpdate,
-            SupervisorWorkerMessage, WorkerMessage,
+            ServerUpdate, SupervisorMessage, SupervisorServerMessage, SupervisorWorkerMessage,
+            WorkerActiveMessage, WorkerInactiveMessage,
         },
-        status::SupervisorStatus,
+        status::Status,
         task::{TaskStatus, Tasks},
         worker::{Worker, WorkerId},
     },
@@ -51,16 +55,10 @@ const MS_JOIN_WAIT_DURATION_PER_WORKER: u64 = 50;
 /// Supervisor of worker threads
 pub(crate) struct Supervisor<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// TcpListener used to manage connections
-    listener: Arc<Mutex<TcpListener>>,
+    listener: Option<Arc<Mutex<TcpListener>>>,
 
     /// Status of the supervisor thread
-    status: SupervisorStatus,
-
-    /// Count of worker for this supervisor
-    worker_count: usize,
-
-    /// Maximum size of incoming message
-    incoming_max_size: usize,
+    status: Status,
 
     /// Shared clients between threads
     clients: Clients,
@@ -72,7 +70,7 @@ pub(crate) struct Supervisor<IN: Message + Send + 'static, OUT: Message + Send +
     tasks: Tasks,
 
     /// Worker thread handles
-    workers: Vec<JoinHandle<()>>,
+    workers: Vec<SupervisorWorker>,
 
     /// Supervisor last pool time
     last_pool: Instant,
@@ -81,56 +79,87 @@ pub(crate) struct Supervisor<IN: Message + Send + 'static, OUT: Message + Send +
     pool_rate_duration: Duration,
 }
 
+/// Worker channel and handles
+pub struct SupervisorWorker {
+    /// Sender for inactive worker.
+    sdr_inactive: Sender<WorkerInactiveMessage>,
+
+    /// Handle of the worker thread
+    handle: JoinHandle<()>,
+}
+
 impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
     /// Create a new instance of [`Supervisor`] from parameters.
     pub fn new(
-        socket: SocketAddr,
         maximum_client: usize,
         worker_count: usize,
         incoming_max_size: usize,
         pool_rate: u64,
         clients: Clients,
         channels: SupervisorChannel<IN, OUT>,
-    ) -> Result<Supervisor<IN, OUT>, ErrorServer> {
-        // Try to create listener
-        match Self::create_tcp_listener(socket) {
-            Ok(listener) => {
-                // Listener created with success
-                let listener = Arc::new(Mutex::new(listener));
+    ) -> Supervisor<IN, OUT> {
+        // Create workers
+        let workers =
+            Self::create_workers(worker_count, incoming_max_size, clients.clone(), &channels);
 
-                Ok(Supervisor {
-                    listener,
-                    worker_count,
-                    incoming_max_size,
-                    clients,
-                    channels,
-                    workers: Vec::<JoinHandle<()>>::with_capacity(worker_count),
-                    last_pool: Instant::now(),
-                    pool_rate_duration: Duration::from_millis(1000 / pool_rate),
-                    status: SupervisorStatus::Paused,
-                    tasks: Tasks::new(maximum_client),
-                })
-            }
-            Err(err) => Err(err),
+        // Return supervisor
+        Supervisor {
+            listener: None,
+            clients,
+            channels,
+            workers,
+
+            last_pool: Instant::now(),
+            pool_rate_duration: Duration::from_millis(1000 / pool_rate),
+            status: Status::Inactive,
+            tasks: Tasks::new(maximum_client),
         }
     }
 
     /// Execute the supervisor routine
     pub fn execute(&mut self) {
-        // Create workers
-        self.create_workers(
-            self.worker_count,
-            self.listener.clone(),
-            self.clients.clone(),
-        );
+        // Supervisor inactive loop
+        'inactive: loop {
+            match self.status {
+                Status::End => break 'inactive,
+                _ => {
+                    self.status = Status::Inactive; // Supervisor is inactive
+                    match self.channels.rcv_supervisor.recv() {
+                        // Wait message from server
+                        Ok(msg) => match msg {
+                            SupervisorMessage::FromServer(server_msg) => match server_msg {
+                                SupervisorServerMessage::Start(listener) => self.active(listener),
+                                SupervisorServerMessage::Stop => {} // Already stopped
+                                SupervisorServerMessage::End => self.status = Status::End,
+                            },
+                            _ => {}
+                        },
+                        Err(_) => break 'inactive, // Server channel lost, end thread
+                    }
+                }
+            }
+        }
+
+        // Join worker threads
+        self.join_workers();
+        self.send_update_to_server(ServerUpdate::Ended);
+    }
+
+    pub fn active(&mut self, listener: Arc<Mutex<TcpListener>>) {
+        // Purge any remaining worker messages
+        self.purge_rcv_worker_channel();
+
+        // Signal all thread to start
+        self.start_workers(listener.clone());
+        self.listener = Some(listener);
 
         // Set active
-        self.status = SupervisorStatus::Active;
-        self.send_update_to_server(SupervisorUpdate::Active);
+        self.status = Status::Active;
+        self.send_update_to_server(ServerUpdate::Active);
 
         'supervisor: loop {
             match self.status {
-                SupervisorStatus::Active | SupervisorStatus::Paused => {
+                Status::Active => {
                     if self.last_pool.elapsed() > self.pool_rate_duration {
                         self.handle_server_tasks(); // Do supervisor tasks
                     }
@@ -151,27 +180,84 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
                             match err {
                                 RecvTimeoutError::Timeout => self.handle_server_tasks(), // Do supervisor tasks
                                 RecvTimeoutError::Disconnected => {
-                                    self.status = SupervisorStatus::Ending
-                                } // Channel lost, kill supervisor
+                                    self.status = Status::End; // Channel lost, end thread
+                                    break 'supervisor;
+                                }
                             }
                         }
                     }
                 }
-                SupervisorStatus::Ending => break 'supervisor,
+                _ => break 'supervisor,
             }
         }
 
-        self.join_workers();
-        self.send_update_to_server(SupervisorUpdate::Ended);
+        // Tell worker to stop
+        for _ in 0..self.workers.len() {
+            self.send_message_to_worker(WorkerActiveMessage::Stop);
+        }
+
+        // Clear all clients
+        self.clear_clients();
+
+        // Remove listener
+        self.listener = None;
+
+        // Tell server currently inactive
+        self.send_update_to_server(ServerUpdate::Inactive);
+    }
+
+    /// Close clients stream connection and purge the list
+    #[inline]
+    fn clear_clients(&mut self) {
+        let clients = self.clients.clone();
+        for client_id in 0..clients.len() {
+            match clients[client_id].lock() {
+                Ok(mut client) => {
+                    match client.take() {
+                        Some(client) => {
+                            // Close stream
+                            match client.stream.shutdown(std::net::Shutdown::Both) {
+                                Ok(_) => {}
+                                Err(_) => {}
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                Err(_) => todo!(), // TODO: Handle lock error
+            }
+
+            // Remove task
+            self.tasks.reception[client_id] = None;
+        }
+    }
+
+    /// Purge worker receive channel of any leftover message before
+    /// starting server.
+    #[inline]
+    fn purge_rcv_worker_channel(&mut self) {
+        match self.channels.rcv_worker.lock() {
+            Ok(rcv) => 'purge: loop {
+                match rcv.try_recv() {
+                    Ok(_) => {}
+                    Err(_) => break 'purge,
+                }
+            },
+            Err(_) => {
+                // Mutex error, close thread
+                self.status = Status::End;
+                return;
+            }
+        }
     }
 
     /// Handle message coming from the server
     #[inline]
     fn handle_server_message(&mut self, message: SupervisorServerMessage) {
         match message {
-            SupervisorServerMessage::Pause => self.status = SupervisorStatus::Paused,
-            SupervisorServerMessage::Resume => self.handle_server_message_resume(),
-            SupervisorServerMessage::Stop => self.status = SupervisorStatus::Ending,
+            SupervisorServerMessage::Start(_) => {} // Already started
+            SupervisorServerMessage::Stop => self.status = Status::Stopping,
+            SupervisorServerMessage::End => self.status = Status::End,
         }
     }
 
@@ -181,7 +267,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         // Incoming connection task
         match self.tasks.incoming {
             TaskStatus::Ready => {
-                self.send_message_to_worker(WorkerMessage::Incoming);
+                self.send_message_to_worker(WorkerActiveMessage::Incoming);
                 self.tasks.incoming = TaskStatus::InProgress;
             }
             TaskStatus::InProgress => {}
@@ -191,9 +277,9 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         for client_id in 0..self.tasks.reception.len() {
             match self.tasks.reception[client_id].as_ref() {
                 Some(task) => match task {
-                    TaskStatus::Ready => {
-                        self.send_message_to_worker(WorkerMessage::Receive(client_id as ClientId))
-                    }
+                    TaskStatus::Ready => self.send_message_to_worker(WorkerActiveMessage::Receive(
+                        client_id as ClientId,
+                    )),
                     TaskStatus::InProgress => {}
                 },
                 None => {}
@@ -204,31 +290,12 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         self.last_pool = Instant::now();
     }
 
-    /// Handle the resume server message
-    #[inline]
-    fn handle_server_message_resume(&mut self) {
-        // Clear all client buffer
-        for client_id in 0..self.tasks.reception.len() {
-            match self.tasks.reception[client_id].as_ref() {
-                Some(task) => match task {
-                    TaskStatus::Ready => {
-                        self.send_message_to_worker(WorkerMessage::Clear(client_id as ClientId))
-                    }
-                    TaskStatus::InProgress => {}
-                },
-                None => {}
-            }
-        }
-        // Set as active
-        self.status = SupervisorStatus::Active;
-    }
-
     /// Handle message coming from a worker
     #[inline]
     fn handle_worker_message(&mut self, message: SupervisorWorkerMessage) {
         match message {
-            SupervisorWorkerMessage::Connected(client_id) => {
-                self.handle_worker_message_connected(client_id)
+            SupervisorWorkerMessage::Connected(client_id, socket) => {
+                self.handle_worker_message_connected(client_id, socket)
             }
             SupervisorWorkerMessage::IncomingJobDone => self.tasks.incoming = TaskStatus::Ready,
             SupervisorWorkerMessage::ReceiveJobDone(client_id) => {
@@ -246,12 +313,12 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
     /// Handle Connected worker message
     #[inline]
-    fn handle_worker_message_connected(&mut self, client_id: ClientId) {
+    fn handle_worker_message_connected(&mut self, client_id: ClientId, socket: SocketAddr) {
         // Register task
         self.tasks.reception[client_id as usize] = Some(TaskStatus::Ready);
 
         // Notify server
-        self.send_update_to_server(SupervisorUpdate::ClientConnected(client_id));
+        self.send_update_to_server(ServerUpdate::ClientConnected(client_id, socket));
     }
 
     /// Handle received done worker message
@@ -266,7 +333,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         self.remove_client_from_lists(client_id);
 
         // Notify server
-        self.send_update_to_server(SupervisorUpdate::ClientDisconnected(client_id));
+        self.send_update_to_server(ServerUpdate::ClientDisconnected(client_id));
     }
 
     /// Handle worker client not found
@@ -278,7 +345,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         }
 
         // Notify server of error
-        self.send_update_to_server(SupervisorUpdate::Error(error));
+        self.send_update_to_server(ServerUpdate::Error(error));
     }
 
     /// Handle worker message that it is finished
@@ -308,20 +375,26 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
     fn join_workers(&mut self) {
         // Tell each worker to end
         for _ in 0..self.workers.len() {
-            self.send_message_to_worker(WorkerMessage::End);
+            self.send_message_to_worker(WorkerActiveMessage::End);
+        }
+        for sw in &self.workers {
+            match sw.sdr_inactive.send(WorkerInactiveMessage::End) {
+                Ok(_) => {}
+                Err(_) => {}
+            }
         }
 
         // Try to join
         let ts = Instant::now();
         let wait_duration =
-            Duration::from_millis(self.worker_count as u64 * MS_JOIN_WAIT_DURATION_PER_WORKER);
+            Duration::from_millis(self.workers.len() as u64 * MS_JOIN_WAIT_DURATION_PER_WORKER);
 
         'workers: loop {
             match self.workers.pop() {
                 Some(worker) => {
                     'join: loop {
-                        if worker.is_finished() {
-                            match worker.join() {
+                        if worker.handle.is_finished() {
+                            match worker.handle.join() {
                                 Ok(_) => {}
                                 Err(_) => {
                                     #[cfg(debug_assertions)]
@@ -347,66 +420,68 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         }
     }
 
-    /// Create the [`Supervisor`] workers
+    /// Tell all workers to start
     #[inline]
-    fn create_workers(
-        &mut self,
-        worker_count: usize,
-        listener: Arc<Mutex<TcpListener>>,
-        clients: Clients,
-    ) {
-        for id in 0..worker_count {
-            let channels = WorkerChannel::new(
-                self.channels.sdr_server.clone(),
-                self.channels.sdr_supervisor.clone(),
-                self.channels.rcv_worker.clone(),
-            );
-
-            let mut worker = Worker::new(
-                id,
-                self.incoming_max_size,
-                listener.clone(),
-                clients.clone(),
-                channels,
-            );
-            self.workers.push(thread::spawn(move || {
-                worker.execute();
-            }));
+    fn start_workers(&mut self, listener: Arc<Mutex<TcpListener>>) {
+        for sw in &self.workers {
+            match sw
+                .sdr_inactive
+                .send(WorkerInactiveMessage::Start(listener.clone()))
+            {
+                Ok(_) => {}
+                Err(_) => self.status = Status::End, // Channel lost, kill thread
+            }
         }
     }
 
-    /// Create the TcpListener from [`SocketAddr`].
+    /// Create the [`Supervisor`] workers
     #[inline]
-    fn create_tcp_listener(socket: SocketAddr) -> Result<TcpListener, ErrorServer> {
-        match TcpListener::bind(socket) {
-            Ok(listener) => {
-                // This should crash instead of having a blocking listener
-                listener.set_nonblocking(true).unwrap();
-                Ok(listener)
-            }
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::AddrInUse => Err(ErrorServer::SocketAddressAlreadyUsed),
-                std::io::ErrorKind::InvalidInput => Err(ErrorServer::SocketInvalid),
-                _ => Err(ErrorServer::UnhandledIOError(err.kind())),
-            },
+    fn create_workers(
+        worker_count: usize,
+        incoming_max_size: usize,
+        clients: Clients,
+        channels: &SupervisorChannel<IN, OUT>,
+    ) -> Vec<SupervisorWorker> {
+        let mut workers = Vec::<SupervisorWorker>::with_capacity(worker_count);
+
+        for id in 0..worker_count {
+            let (sdr_inactive, rcv_inactive) = mpsc::channel::<WorkerInactiveMessage>();
+
+            let worker_channels = WorkerChannel::new(
+                channels.sdr_incoming.clone(),
+                channels.sdr_supervisor.clone(),
+                rcv_inactive,
+                channels.rcv_worker.clone(),
+            );
+
+            let mut worker = Worker::new(id, incoming_max_size, clients.clone(), worker_channels);
+
+            workers.push(SupervisorWorker {
+                sdr_inactive,
+                handle: thread::spawn(move || {
+                    worker.execute();
+                }),
+            });
         }
+
+        workers
     }
 
     /// Send a message to worker thread.
     #[inline]
-    fn send_message_to_worker(&mut self, message: WorkerMessage<OUT>) {
+    fn send_message_to_worker(&mut self, message: WorkerActiveMessage<OUT>) {
         match self.channels.sdr_worker.send(message) {
             Ok(_) => {}
-            Err(_) => self.status = SupervisorStatus::Ending, // Channel lost, kill supervisor
+            Err(_) => self.status = Status::End, // Channel lost, kill supervisor
         }
     }
 
     /// Send [`SupervisorUpdate`] to the server.
     #[inline]
-    fn send_update_to_server(&mut self, update: SupervisorUpdate) {
-        match self.channels.sdr_server.send(ServerMessage::Update(update)) {
+    fn send_update_to_server(&mut self, update: ServerUpdate) {
+        match self.channels.sdr_server.send(update) {
             Ok(_) => {}
-            Err(_) => self.status = SupervisorStatus::Ending, // Channel lost, kill supervisor
+            Err(_) => self.status = Status::End, // Channel lost, kill supervisor
         }
     }
 }

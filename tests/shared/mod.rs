@@ -23,15 +23,15 @@ SOFTWARE.
 */
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::thread::Thread;
 use std::time::Duration;
 
 use baphonet::Message;
 use baphonet::client::Client;
 use baphonet::client::builder::ClientBuilder;
-use baphonet::server::{Server, ServerBuilder};
+use baphonet::server::message::OutgoingMessage;
+use baphonet::server::{ClientId, MAXIMUM_POOL_RATE_PER_SECOND, Server, ServerBuilder};
 
-use crate::shared::message::ClientToServerMessage;
+use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
 pub mod message;
 
@@ -56,6 +56,12 @@ pub struct WorkerCount {
     pub all: usize,
 }
 pub const WORKER_COUNT: WorkerCount = WorkerCount {
+    one: 1,
+    some: 4,
+    all: 16,
+};
+
+pub const DISPATCHER_COUNT: WorkerCount = WorkerCount {
     one: 1,
     some: 4,
     all: 16,
@@ -92,6 +98,33 @@ macro_rules! timeout_loop {
     };
 }
 
+/// Wrapper function to send client message
+pub fn send_client_message<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    client: &mut Client<IN, OUT>,
+    message: OUT,
+) {
+    client
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(message)
+        .unwrap();
+}
+
+/// Wrapper function to send server message
+pub fn send_server_message<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    server: &mut Server<IN, OUT>,
+    client_id: ClientId,
+    message: OUT,
+) {
+    server
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(client_id, message)
+        .unwrap();
+}
+
 /// Create a test socket from a port
 pub fn create_test_socket(port: u16) -> SocketAddr {
     SocketAddr::new(IpAddr::V4(TEST_IPV4), port)
@@ -103,25 +136,33 @@ pub fn create_server_and_clients<IN: Message + Send + 'static, OUT: Message + Se
     worker_count: usize,
     client_count: usize,
 ) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
-    let mut server = ServerBuilder::new()
-        .maximum_client(max_client)
-        .worker(worker_count)
-        .build()
-        .unwrap();
-    let mut port: u16 = TEST_TCP_PORT;
+    let (mut server, port) = create_server_and_port(max_client, worker_count);
 
-    timeout_loop! {
-        let socket = create_test_socket(port);
-
-        match server.start(socket) {
-            Ok(_) => break,
-            Err(_) => port += 1,
-        }
-    }
+    // Wait for server to be active
+    timeout_loop!(match server.update() {
+        Some(update) => match update {
+            baphonet::server::message::ServerUpdate::Active => break,
+            _ => {}
+        },
+        None => {}
+    });
 
     let clients = create_connect_clients(client_count, port);
 
-    std::thread::sleep(Duration::from_millis(500));
+    let mut sum_client: usize = 0;
+    // Wait for each client to be connected
+    timeout_loop!(match server.update() {
+        Some(update) => match update {
+            baphonet::server::message::ServerUpdate::ClientConnected(_, _) => {
+                sum_client += 1;
+                if sum_client == client_count {
+                    break;
+                }
+            }
+            _ => {}
+        },
+        None => {}
+    });
 
     (server, clients)
 }
@@ -133,9 +174,17 @@ pub fn create_server_and_clients_default<
 >(
     client_count: usize,
 ) -> (Server<IN, OUT>, Vec<Client<OUT, IN>>) {
+    create_server_and_clients(CLIENT_SIZE.all, WORKER_COUNT.some, client_count)
+}
+
+/// Will create and start a server while finding a free port
+pub fn create_server_and_port<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+    max_client: usize,
+    worker_count: usize,
+) -> (Server<IN, OUT>, u16) {
     let mut server = ServerBuilder::new()
-        .maximum_client(CLIENT_SIZE.all)
-        .worker(WORKER_COUNT.some)
+        .maximum_client(max_client)
+        .worker(worker_count)
         .build()
         .unwrap();
     let mut port: u16 = TEST_TCP_PORT;
@@ -149,21 +198,21 @@ pub fn create_server_and_clients_default<
         }
     }
 
-    let clients = create_connect_clients(client_count, port);
-
-    std::thread::sleep(Duration::from_millis(500));
-
-    (server, clients)
+    (server, port)
 }
 
 /// Will create and start a server while finding a free port
-pub fn create_server_and_port<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
+pub fn create_server_and_port_max_pool<
+    IN: Message + Send + 'static,
+    OUT: Message + Send + 'static,
+>(
     max_client: usize,
     worker_count: usize,
 ) -> (Server<IN, OUT>, u16) {
     let mut server = ServerBuilder::new()
         .maximum_client(max_client)
         .worker(worker_count)
+        .pool_rate(MAXIMUM_POOL_RATE_PER_SECOND)
         .build()
         .unwrap();
     let mut port: u16 = TEST_TCP_PORT;
@@ -202,7 +251,7 @@ pub fn close_clients<IN: Message + Send + 'static, OUT: Message + Send + 'static
     clients: &mut Vec<Client<IN, OUT>>,
 ) {
     for client in clients {
-        client.close().unwrap()
+        client.close()
     }
 }
 
@@ -229,4 +278,18 @@ pub fn compare_client_server_message(cts1: &ClientToServerMessage, cts2: &Client
     for i in 0..cts1.ps.len() {
         assert_eq!(cts1.ps[i], cts2.ps[i]);
     }
+}
+
+/// Compare server to client message
+pub fn compare_server_client_message(stc1: &ServerToClientMessage, stc2: &ServerToClientMessage) {
+    // Compare values
+    assert_eq!(stc1.pu8, stc2.pu8);
+    assert_eq!(stc1.pu16, stc2.pu16);
+    assert_eq!(stc1.pu32, stc2.pu32);
+    assert_eq!(stc1.pu64, stc2.pu64);
+    assert_eq!(stc1.pu128, stc2.pu128);
+
+    assert_eq!(stc1.pstring1, stc2.pstring1);
+    assert_eq!(stc1.pstring2, stc2.pstring2);
+    assert_eq!(stc1.pstring3, stc2.pstring3);
 }

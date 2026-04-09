@@ -1,26 +1,29 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+use std::{
+    net::{SocketAddr, TcpListener},
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     Message,
@@ -29,22 +32,12 @@ use crate::{
 
 /// Message and updates sent to and received by server
 #[derive(Debug, Clone)]
-pub enum ServerMessage<IN: Message + Send> {
-    /// Incoming message of a client
-    Incoming(IncomingMessage<IN>),
-
-    /// Server update sent from supervisor
-    Update(SupervisorUpdate),
-}
-
-/// Possible server update
-#[derive(Debug, Clone, Copy)]
-pub enum SupervisorUpdate {
-    /// Supervisor is now active
+pub enum ServerUpdate {
+    /// Server is now active
     Active,
 
-    /// New client connected with Id
-    ClientConnected(ClientId),
+    /// New client connected with Id and address
+    ClientConnected(ClientId, SocketAddr),
 
     /// A client disconnected with Id
     ClientDisconnected(ClientId),
@@ -55,12 +48,15 @@ pub enum SupervisorUpdate {
     /// Server is currently full
     Full,
 
+    /// Server is currently inactive
+    Inactive,
+
     /// Supervisor has ended
     Ended,
 }
 
 /// Message sent to and received by supervisor
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SupervisorMessage {
     /// Message sent from server
     FromServer(SupervisorServerMessage),
@@ -70,23 +66,23 @@ pub enum SupervisorMessage {
 }
 
 /// Supervisor message sent from server
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SupervisorServerMessage {
-    /// Pause the supervisor
-    Pause,
+    /// Give listener to supervisor
+    Start(Arc<Mutex<TcpListener>>),
 
-    /// Resume the supervisor
-    Resume,
-
-    /// Stop the supervisor, ending threads
+    /// Stop the supervisor
     Stop,
+
+    /// Drop the supervisor thread
+    End,
 }
 
 /// Supervisor message sent from worker
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorWorkerMessage {
     /// Client is now connected
-    Connected(ClientId),
+    Connected(ClientId, SocketAddr),
 
     /// Worker finished incoming connection job
     IncomingJobDone,
@@ -104,9 +100,21 @@ pub enum SupervisorWorkerMessage {
     Finished(WorkerId),
 }
 
-/// Message sent to and received by worker
+/// Message sent to inactive worker
+pub enum WorkerInactiveMessage {
+    /// Start the worker
+    Start(Arc<Mutex<TcpListener>>),
+
+    /// Stop the worker, ending the thread
+    Stop,
+
+    /// Drop the worker thread
+    End,
+}
+
+/// Message sent to and received by active worker
 #[derive(Debug, Clone)]
-pub enum WorkerMessage<OUT: Message + Send> {
+pub enum WorkerActiveMessage<OUT: Message + Send> {
     /// Handle incoming connection to server
     Incoming,
 
@@ -116,11 +124,11 @@ pub enum WorkerMessage<OUT: Message + Send> {
     /// Send server message to clients
     Send(OutgoingMessage<OUT>),
 
-    /// Cleat a client stream buffer
-    Clear(ClientId),
-
     /// Disconnect client
     Disconnect(ClientId),
+
+    /// Stop Client thread (set inactive)
+    Stop,
 
     /// End client thread
     End,
@@ -134,19 +142,24 @@ pub struct OutgoingMessage<OUT: Message + Send> {
 }
 
 impl<OUT: Message + Send> OutgoingMessage<OUT> {
-    /// Created a new server message around a CoreServerMessage
+    /// Wrap an outgoing message with destinations
     #[inline]
-    pub fn new(message: OUT) -> OutgoingMessage<OUT> {
+    pub fn new(client_id: ClientId, message: OUT) -> OutgoingMessage<OUT> {
+        let destinations = vec![client_id];
         OutgoingMessage {
-            destinations: Vec::new(),
+            destinations,
             message,
         }
     }
 
-    /// Add a [`ClientId`] destination to message.
+    /// Wrap an outgoing message with multiple destinations in a vector.
     #[inline]
-    pub fn add_destination(&mut self, client_id: ClientId) {
-        self.destinations.push(client_id);
+    pub fn new_vec(destinations: &Vec<ClientId>, message: OUT) -> OutgoingMessage<OUT> {
+        let destinations = destinations.clone();
+        OutgoingMessage {
+            destinations,
+            message,
+        }
     }
 }
 

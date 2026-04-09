@@ -61,6 +61,15 @@ pub use transmitter::Transmitter;
 
 use crate::MAXIMUM_MESSAGE_SIZE;
 
+/// Minimum size of incoming message.
+pub const INCOMING_SIZE_MINIMUM: usize = 1;
+
+/// Default maximum size of incoming message. (64KB)
+pub const INCOMING_SIZE_DEFAULT: usize = MAXIMUM_MESSAGE_SIZE;
+
+/// Maximum size of incoming message.
+pub const INCOMING_SIZE_MAXIMUM: usize = MAXIMUM_MESSAGE_SIZE;
+
 /// Minimum size of outgoing message.
 pub const OUTGOING_SIZE_MINIMUM: usize = 1;
 

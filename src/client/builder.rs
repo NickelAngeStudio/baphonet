@@ -25,15 +25,20 @@ SOFTWARE.
 use crate::{
     Message,
     client::{
-        Client, ErrorClient, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM,
-        POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM, POOL_RATE_PER_SECOND_MINIMUM,
+        Client, ErrorClient, INCOMING_SIZE_DEFAULT, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM,
+        OUTGOING_SIZE_MINIMUM, POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM,
+        POOL_RATE_PER_SECOND_MINIMUM,
     },
+    server::{MAXIMUM_INCOMING_SIZE, MINIMUM_INCOMING_SIZE},
 };
 
 /// Builder helper used to create client.
 pub struct ClientBuilder {
     /// Pool rate of the client
     pub(crate) pool_rate: u64,
+
+    /// Maximum size of incoming message
+    pub(crate) incoming_max_size: usize,
 
     /// Maximum size of outgoing message
     pub(crate) outgoing_max_size: usize,
@@ -44,6 +49,7 @@ impl ClientBuilder {
     pub fn new() -> ClientBuilder {
         ClientBuilder {
             pool_rate: POOL_RATE_PER_SECOND_DEFAULT,
+            incoming_max_size: INCOMING_SIZE_DEFAULT,
             outgoing_max_size: OUTGOING_SIZE_DEFAULT,
         }
     }
@@ -60,6 +66,17 @@ impl ClientBuilder {
     /// Default is [`DEFAULT_POOL_RATE_PER_SECOND`].
     pub fn pool_rate(mut self, pool_rate: u64) -> ClientBuilder {
         self.pool_rate = pool_rate;
+        self
+    }
+
+    /// Maximum size accepted of message from server.
+    ///
+    /// Value must be between [`MINIMUM_INCOMING_SIZE`] and
+    /// [`MAXIMUM_INCOMING_SIZE`].
+    ///
+    /// Default is [`DEFAULT_INCOMING_SIZE`].
+    pub fn incoming_max_size(mut self, incoming_max_size: usize) -> ClientBuilder {
+        self.incoming_max_size = incoming_max_size;
         self
     }
 
@@ -92,6 +109,12 @@ impl ClientBuilder {
         if self.outgoing_max_size > OUTGOING_SIZE_MAXIMUM {
             return Err(ErrorClient::OutgoingMessageSizeAboveMaximum);
         }
+        if self.incoming_max_size < MINIMUM_INCOMING_SIZE {
+            return Err(ErrorClient::IncomingMessageSizeBelowMinimum);
+        }
+        if self.incoming_max_size > MAXIMUM_INCOMING_SIZE {
+            return Err(ErrorClient::IncomingMessageSizeAboveMaximum);
+        }
 
         Ok(Client::build(self))
     }
@@ -102,9 +125,9 @@ mod tests {
     use crate::{
         Message,
         client::{
-            ErrorClient, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM,
-            POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM,
-            POOL_RATE_PER_SECOND_MINIMUM, builder::ClientBuilder,
+            ErrorClient, INCOMING_SIZE_MAXIMUM, INCOMING_SIZE_MINIMUM, OUTGOING_SIZE_DEFAULT,
+            OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM, POOL_RATE_PER_SECOND_DEFAULT,
+            POOL_RATE_PER_SECOND_MAXIMUM, POOL_RATE_PER_SECOND_MINIMUM, builder::ClientBuilder,
         },
     };
 
@@ -176,6 +199,24 @@ mod tests {
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorClient::OutgoingMessageSizeAboveMaximum),
+        }
+    }
+
+    #[test]
+    fn client_builder_err_incoming_max_below_min() {
+        let builder = ClientBuilder::new().incoming_max_size(INCOMING_SIZE_MINIMUM - 1);
+        match builder.build::<TestMessage, TestMessage>() {
+            Ok(_) => panic!("Shouldn't be Ok()!"),
+            Err(err) => assert_eq!(err, ErrorClient::IncomingMessageSizeBelowMinimum),
+        }
+    }
+
+    #[test]
+    fn client_builder_err_incoming_max_above_max() {
+        let builder = ClientBuilder::new().incoming_max_size(INCOMING_SIZE_MAXIMUM + 1);
+        match builder.build::<TestMessage, TestMessage>() {
+            Ok(_) => panic!("Shouldn't be Ok()!"),
+            Err(err) => assert_eq!(err, ErrorClient::IncomingMessageSizeAboveMaximum),
         }
     }
 }

@@ -48,6 +48,9 @@ pub struct Worker<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
     /// Size of incoming message if any
     inc_size: Option<usize>,
 
+    /// Maximum incoming size for message
+    incoming_max_size: usize,
+
     /// Maximum outgoing size for message
     outgoing_max_size: usize,
 
@@ -61,6 +64,7 @@ pub struct Worker<IN: Message + Send + 'static, OUT: Message + Send + 'static> {
 impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT> {
     /// Create new worker from socket address and channels.
     pub fn new(
+        incoming_max_size: usize,
         outgoing_max_size: usize,
         pool_rate: u64,
         channels: WorkerChannel<IN, OUT>,
@@ -69,6 +73,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
             channels,
             status: Status::Disconnected,
             inc_size: None,
+            incoming_max_size,
             outgoing_max_size,
             last_pool: Instant::now(),
             pool_rate_duration: Duration::from_millis(1000 / pool_rate),
@@ -182,7 +187,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                             u16::from_le_bytes(buffer[..SIZE_OF_MESSAGE_SIZE].try_into().unwrap())
                                 as usize;
 
-                        if size <= MAXIMUM_MESSAGE_SIZE {
+                        if size <= self.incoming_max_size {
                             Some(size)
                         } else {
                             // Clear stream.
@@ -224,7 +229,9 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                 }
                 Err(_) => {
                     Self::clear_stream(tcp_stream, buffer); // Clear stream
-                    self.update_client(ClientUpdate::Error(ErrorWorker::IncomingMessageError));
+                    self.update_client(ClientUpdate::Error(
+                        ErrorWorker::IncomingMessageDeserializeError,
+                    ));
                     None
                 }
             },
@@ -245,7 +252,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
     fn send(&mut self, msg: OUT, tcp_stream: &mut TcpStream, buffer: &mut [u8]) {
         match msg.serialize(buffer) {
             Ok(size) => {
-                if size <= MAXIMUM_MESSAGE_SIZE {
+                if size <= self.outgoing_max_size {
                     // Get bytes of message size
                     let size_bytes = (size as u16).to_le_bytes();
 
@@ -254,13 +261,21 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                         Ok(_) => {
                             // Send message
                             match tcp_stream.write_all(&buffer[..size]) {
-                                Ok(_) => {
-                                    // Send message
-                                }
-                                Err(_) => self.handle_connection_lost(), // Connection lost
+                                Ok(_) => {}
+                                Err(err) => match err.kind() {
+                                    std::io::ErrorKind::WouldBlock => self.requeue_message(msg),
+                                    _ => {
+                                        self.handle_connection_lost();
+                                    }
+                                },
                             }
                         }
-                        Err(_) => self.handle_connection_lost(), // Connection lost
+                        Err(err) => match err.kind() {
+                            std::io::ErrorKind::WouldBlock => self.requeue_message(msg),
+                            _ => {
+                                self.handle_connection_lost();
+                            }
+                        },
                     }
                 } else {
                     self.update_client(ClientUpdate::Error(
@@ -326,5 +341,18 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                 self.status = Status::Ended;
             }
         }
+    }
+
+    /// Put unsent message back on pile when sending a message would block.
+    fn requeue_message(&mut self, message: OUT) {
+        /*
+        match self.channels.sdr_worker.send(WorkerMessage::Send(message)) {
+            Ok(_) => {}
+            Err(_) => {
+                // Channel is closed, communication to client is lost, end worker.
+                self.status = Status::Ended;
+            }
+        }
+        */
     }
 }

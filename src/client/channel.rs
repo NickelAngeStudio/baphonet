@@ -50,6 +50,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> ClientChannel<
         let (sdr_incoming, rcv_incoming) = mpsc::channel::<IN>();
         let (sdr_worker, rcv_worker) = mpsc::channel::<WorkerMessage<OUT>>();
 
+        let sdr_worker_clone = sdr_worker.clone();
         let transceiver = Transceiver::new(rcv_incoming, sdr_worker.clone());
         (
             ClientChannel {
@@ -60,6 +61,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> ClientChannel<
             WorkerChannel {
                 sdr_update,
                 rcv_worker,
+                sdr_worker: sdr_worker_clone,
                 sdr_incoming,
             },
         )
@@ -76,4 +78,7 @@ pub struct WorkerChannel<IN: Message + Send + 'static, OUT: Message + Send + 'st
 
     // Receiver channel for worker messages
     pub rcv_worker: Receiver<WorkerMessage<OUT>>,
+
+    // Sender channel for worker messages
+    pub sdr_worker: Sender<WorkerMessage<OUT>>,
 }

@@ -52,10 +52,16 @@ pub enum ErrorClient {
     /// Pool rate is above [`MAXIMUM_POOL_RATE_PER_SECOND`](super::MAXIMUM_POOL_RATE_PER_SECOND).
     PoolRateAboveMaximum,
 
-    /// Incoming message size is below [`MINIMUM_OUTGOING_SIZE`].
+    /// Incoming message size is below [`INCOMING_SIZE_MINIMUM`].
+    IncomingMessageSizeBelowMinimum,
+
+    /// Incoming message size is above [`INCOMING_SIZE_MAXIMUM`].
+    IncomingMessageSizeAboveMaximum,
+
+    /// Outgoing message size is below [`OUTGOING_SIZE_MINIMUM`].
     OutgoingMessageSizeBelowMinimum,
 
-    /// Incoming message size is above [`MAXIMUM_OUTGOING_SIZE`].
+    /// Outgoing message size is above [`OUTGOING_SIZE_MAXIMUM`].
     OutgoingMessageSizeAboveMaximum,
 
     /// Error happened while trying to join worker thread
@@ -91,5 +97,5 @@ pub enum ErrorWorker {
     IncomingMessageTooLarge,
 
     /// An error occured while deserializing incoming message
-    IncomingMessageError,
+    IncomingMessageDeserializeError,
 }

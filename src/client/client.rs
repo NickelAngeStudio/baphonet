@@ -63,6 +63,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Client<IN, OUT
         let (client_channels, worker_channels) = ClientChannel::create_client_worker_channels();
 
         let mut worker = Worker::new(
+            builder.incoming_max_size,
             builder.outgoing_max_size,
             builder.pool_rate,
             worker_channels,

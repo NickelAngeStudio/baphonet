@@ -28,15 +28,28 @@ mod server;
 #[doc(hidden)]
 mod builder;
 
+#[doc(hidden)]
 pub(crate) mod client;
 
+#[doc(hidden)]
 pub mod error;
+
+#[doc(hidden)]
 pub mod transceiver;
+
+#[doc(hidden)]
 mod transmitter;
 
+#[doc(hidden)]
 pub mod message;
+
+#[doc(hidden)]
 pub mod supervisor;
+
+#[doc(hidden)]
 mod task;
+
+#[doc(hidden)]
 pub mod worker;
 
 #[doc(hidden)]
@@ -48,6 +61,8 @@ pub mod channel;
 pub use builder::ServerBuilder;
 pub use server::Server;
 pub use status::Status;
+pub use transceiver::Transceiver;
+pub use transmitter::Transmitter;
 
 use crate::MAXIMUM_MESSAGE_SIZE;
 

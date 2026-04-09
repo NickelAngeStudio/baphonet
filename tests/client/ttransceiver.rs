@@ -29,8 +29,8 @@ use baphonet::client::{ErrorTransceiver, transceiver::Transceiver};
 
 use crate::{
     shared::{
-        CLIENT_SIZE, DISPATCHER_COUNT, WORKER_COUNT, close_clients, compare_client_server_message,
-        compare_server_client_message, create_server_and_clients_default, create_server_and_port,
+        CLIENT_SIZE, close_clients, compare_client_server_message, compare_server_client_message,
+        create_server_and_clients_default,
         message::{ClientToServerMessage, ServerToClientMessage},
         send_server_message,
     },

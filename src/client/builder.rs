@@ -29,7 +29,7 @@ use crate::{
         OUTGOING_SIZE_MINIMUM, POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM,
         POOL_RATE_PER_SECOND_MINIMUM,
     },
-    server::{MAXIMUM_INCOMING_SIZE, MINIMUM_INCOMING_SIZE},
+    server::{INCOMING_SIZE_MAXIMUM, INCOMING_SIZE_MINIMUM},
 };
 
 /// Builder helper used to create client.
@@ -109,10 +109,10 @@ impl ClientBuilder {
         if self.outgoing_max_size > OUTGOING_SIZE_MAXIMUM {
             return Err(ErrorClient::OutgoingMessageSizeAboveMaximum);
         }
-        if self.incoming_max_size < MINIMUM_INCOMING_SIZE {
+        if self.incoming_max_size < INCOMING_SIZE_MINIMUM {
             return Err(ErrorClient::IncomingMessageSizeBelowMinimum);
         }
-        if self.incoming_max_size > MAXIMUM_INCOMING_SIZE {
+        if self.incoming_max_size > INCOMING_SIZE_MAXIMUM {
             return Err(ErrorClient::IncomingMessageSizeAboveMaximum);
         }
 

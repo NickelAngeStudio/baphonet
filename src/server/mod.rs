@@ -59,6 +59,10 @@ pub mod status;
 pub mod channel;
 
 pub use builder::ServerBuilder;
+pub use error::ErrorServer;
+pub use error::ErrorTransceiver;
+pub use error::ErrorUpdate;
+pub use message::ServerUpdate;
 pub use server::Server;
 pub use status::Status;
 pub use transceiver::Transceiver;
@@ -69,34 +73,43 @@ use crate::MAXIMUM_MESSAGE_SIZE;
 pub type ClientId = u16;
 
 /// Minimum size of incoming message.
-pub const MINIMUM_INCOMING_SIZE: usize = 1;
+pub const INCOMING_SIZE_MINIMUM: usize = 1;
 
 /// Default maximum size of incoming message. (1KB)
-pub const DEFAULT_INCOMING_SIZE: usize = 1024;
+pub const INCOMING_SIZE_DEFAULT: usize = 1024;
 
 /// Maximum size of incoming message.
-pub const MAXIMUM_INCOMING_SIZE: usize = MAXIMUM_MESSAGE_SIZE;
+pub const INCOMING_SIZE_MAXIMUM: usize = MAXIMUM_MESSAGE_SIZE;
+
+/// Minimum size of outgoing message.
+pub const OUTGOING_SIZE_MINIMUM: usize = 1;
+
+/// Default maximum size of outgoing message. (64KB)
+pub const OUTGOING_SIZE_DEFAULT: usize = MAXIMUM_MESSAGE_SIZE;
+
+/// Maximum size of outgoing message.
+pub const OUTGOING_SIZE_MAXIMUM: usize = MAXIMUM_MESSAGE_SIZE;
 
 /// Current minimum client cap
-pub const MINIMUM_CLIENT: usize = 1;
+pub const MAXCLIENT_MINIMUM: usize = 1;
 
 /// Default maximum client for builder
-pub const DEFAULT_MAXIMUM_CLIENT: usize = 32;
+pub const MAXCLIENT_DEFAULT: usize = 32;
 
 /// Current maximum client cap
-pub const MAXIMUM_CLIENT: usize = ClientId::MAX as usize;
+pub const MAXCLIENT_MAXIMUM: usize = ClientId::MAX as usize;
 
 /// Minimum worker count cap
-pub const MINIMUM_WORKER: usize = 1;
+pub const WORKER_COUNT_MINIMUM: usize = 1;
 
 /// Current minimum worker count
-pub const DEFAULT_WORKER_COUNT: usize = 4;
+pub const WORKER_COUNT_DEFAULT: usize = 4;
 
 /// Default pool rate of the supervisor worker per second.
-pub const DEFAULT_POOL_RATE_PER_SECOND: u64 = 30;
+pub const POOL_RATE_PER_SECOND_DEFAULT: u64 = 30;
 
 /// Minimum pool rate that can be set.
-pub const MINIMUM_POOL_RATE_PER_SECOND: u64 = 1;
+pub const POOL_RATE_PER_SECOND_MINIMUM: u64 = 1;
 
 /// Maximum pool rate that can be set.
-pub const MAXIMUM_POOL_RATE_PER_SECOND: u64 = 1000;
+pub const POOL_RATE_PER_SECOND_MAXIMUM: u64 = 1000;

@@ -51,6 +51,12 @@ pub enum ErrorServer {
     /// Incoming message size is above [`MAXIMUM_INCOMING_SIZE`].
     IncomingMessageSizeAboveMaximum,
 
+    /// Outgoing message size is below [`OUTGOING_SIZE_MINIMUM`].
+    OutgoingMessageSizeBelowMinimum,
+
+    /// Outgoing message size is above [`OUTGOING_SIZE_MAXIMUM`].
+    OutgoingMessageSizeAboveMaximum,
+
     /// Server is currently inactive
     Inactive,
 
@@ -63,14 +69,8 @@ pub enum ErrorServer {
     /// Provided socket address is already used by another process
     SocketAddressAlreadyUsed,
 
-    /// Error happened while trying to join supervisor thread
-    StopJoinError,
-
     /// Unexpected error happened
     UnexpectedError,
-
-    /// Server took too much time stopping.
-    StopTimeout,
 
     /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),
@@ -108,5 +108,5 @@ pub enum ErrorUpdate {
     IncomingMessageTooLarge(ClientId),
 
     /// Incoming message deserialize ended in error
-    IncomingMessageError(ClientId),
+    IncomingMessageDeserializeError(ClientId),
 }

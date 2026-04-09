@@ -78,6 +78,7 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Server<IN, OUT
             builder.maximum_client,
             builder.worker_count,
             builder.incoming_max_size,
+            builder.outgoing_max_size,
             builder.pool_rate,
             clients.clone(),
             supervisor_channels,

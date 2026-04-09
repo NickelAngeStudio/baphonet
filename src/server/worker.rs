@@ -78,6 +78,9 @@ pub(crate) struct Worker<IN: Message + Send, OUT: Message + Send> {
     /// Maximum size of incoming message
     incoming_max_size: usize,
 
+    /// Maximum size of outgoing message
+    outgoing_max_size: usize,
+
     /// Shared TCP listener
     listener: Option<Arc<Mutex<TcpListener>>>,
 
@@ -96,12 +99,14 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     pub fn new(
         worker_id: WorkerId,
         incoming_max_size: usize,
+        outgoing_max_size: usize,
         clients: Clients,
         channels: WorkerChannel<IN, OUT>,
     ) -> Worker<IN, OUT> {
         Worker {
             worker_id,
             incoming_max_size,
+            outgoing_max_size,
             listener: None,
             clients,
             status: Status::Inactive,
@@ -333,7 +338,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                             u16::from_le_bytes(buffer[..SIZE_OF_MESSAGE_SIZE].try_into().unwrap())
                                 as usize;
 
-                        if size <= MAXIMUM_MESSAGE_SIZE {
+                        if size <= self.incoming_max_size {
                             Some(size)
                         } else {
                             // Clear stream.
@@ -376,7 +381,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                     Err(_) => {
                         Self::clear_stream(&mut client.stream, buffer); // Clear stream
                         self.send_message_to_supervisor(SupervisorWorkerMessage::Error(
-                            ErrorUpdate::IncomingMessageError(client_id),
+                            ErrorUpdate::IncomingMessageDeserializeError(client_id),
                         ));
                         None
                     }
@@ -400,7 +405,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     fn handle_worker_send(&mut self, buffer: &mut Vec<u8>, message: OutgoingMessage<OUT>) {
         match message.message.serialize(buffer) {
             Ok(size) => {
-                if size > MAXIMUM_MESSAGE_SIZE {
+                if size > self.outgoing_max_size {
                     self.send_message_to_supervisor(SupervisorWorkerMessage::Error(
                         ErrorUpdate::OutgoingMessageTooLarge,
                     ));

@@ -32,7 +32,7 @@ mod tstop;
 mod tclients;
 
 /// Tests for Server::update()
-//mod tupdate;
+mod tupdate;
 
 /// Tests for Server::transceiver()s
 mod ttransceiver;

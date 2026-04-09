@@ -23,7 +23,7 @@
 use baphonet::{
     Message,
     client::{ClientBuilder, ClientUpdate, ErrorWorker, OUTGOING_SIZE_DEFAULT},
-    server::{MINIMUM_INCOMING_SIZE, message::ServerUpdate},
+    server::{INCOMING_SIZE_MINIMUM, message::ServerUpdate},
 };
 
 use crate::{
@@ -206,7 +206,7 @@ fn client_update_some_error_incoming_too_large() {
         WORKER_COUNT.some,
     );
     let mut client = ClientBuilder::new()
-        .incoming_max_size(MINIMUM_INCOMING_SIZE)
+        .incoming_max_size(INCOMING_SIZE_MINIMUM)
         .build::<ServerToClientMessage, ClientToServerMessage>()
         .unwrap();
     client.connect(create_test_socket(port)).unwrap();

@@ -22,7 +22,11 @@
 
 use std::time::Duration;
 
-use baphonet::server::{ClientId, ErrorUpdate, ServerBuilder, ServerUpdate};
+use baphonet::Message;
+use baphonet::server::{
+    ClientId, ErrorUpdate, INCOMING_MESSAGE_SIZE, OUTGOING_MESSAGE_SIZE, ServerBuilder,
+    ServerUpdate,
+};
 
 use crate::{
     shared::{
@@ -284,22 +288,178 @@ fn is_all_not_found(list: &Vec<bool>) -> bool {
     true
 }
 
+macro_rules! create_test_message {
+    ($struct:ident, {$($serialize:tt)*}, {$($deserialize:tt)*}) => {
+        struct $struct {}
+        impl Message for $struct {
+            fn serialize(&self, _buffer: &mut [u8]) -> Result<usize, ()> {
+                $($serialize)*
+            }
+            fn deserialize(_buffer: &[u8]) -> Result<Self, ()>
+            where
+                Self: Sized,
+            {
+                $($deserialize)*
+            }
+        }
+    };
+}
+
+create_test_message!(
+    OutgoingTooLargeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default + 1) },
+    { todo!() }
+);
+
 #[test]
 fn server_update_some_error_outgoing_too_large() {
-    todo!()
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        OutgoingTooLargeError,
+        OutgoingTooLargeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
+
+    server
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(0, OutgoingTooLargeError {})
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::OutgoingMessageTooLarge => {
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    client.close();
+    server.stop();
 }
+
+create_test_message!(OutgoingSerializeError, { Err(()) }, { todo!() });
 
 #[test]
 fn server_update_some_error_outgoing_serialize_error() {
-    todo!()
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        OutgoingSerializeError,
+        OutgoingSerializeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
+
+    server
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(0, OutgoingSerializeError {})
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::OutgoingMessageSerializeError => {
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    client.close();
+    server.stop();
 }
 
 #[test]
 fn server_update_some_error_incoming_too_large() {
-    todo!()
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .incoming_max_size(INCOMING_MESSAGE_SIZE.minimum)
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1004;
+    server.start(create_test_socket(port)).unwrap();
+
+    let mut clients = create_connect_clients::<ServerToClientMessage, ClientToServerMessage>(
+        CLIENT_SIZE.one,
+        port,
+    );
+
+    clients[0]
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(ClientToServerMessage::control())
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::IncomingMessageTooLarge(client_id) => {
+                        assert_eq!(client_id, 0);
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
 }
 
+create_test_message!(
+    IncomingDeserializeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.minimum) },
+    { Err(()) }
+);
 #[test]
 fn server_update_some_error_incoming_deserialize_error() {
-    todo!()
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        IncomingDeserializeError,
+        IncomingDeserializeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
+
+    client
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(IncomingDeserializeError {})
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::IncomingMessageDeserializeError(client_id) => {
+                        assert_eq!(client_id, 0);
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    client.close();
+    server.stop();
 }

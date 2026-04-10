@@ -22,8 +22,10 @@
 
 use baphonet::{
     Message,
-    client::{ClientBuilder, ClientUpdate, ErrorWorker, OUTGOING_SIZE_DEFAULT},
-    server::{INCOMING_SIZE_MINIMUM, message::ServerUpdate},
+    client::{
+        ClientBuilder, ClientUpdate, ErrorWorker, INCOMING_MESSAGE_SIZE, OUTGOING_MESSAGE_SIZE,
+    },
+    server::message::ServerUpdate,
 };
 
 use crate::{
@@ -165,9 +167,11 @@ fn client_update_some_error_outgoing_serialize() {
     server.stop();
 }
 
-create_test_message!(OutgoingTooLargeError, { Ok(OUTGOING_SIZE_DEFAULT + 1) }, {
-    todo!()
-});
+create_test_message!(
+    OutgoingTooLargeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default + 1) },
+    { todo!() }
+);
 #[test]
 fn client_update_some_error_outgoing_too_large() {
     let (mut server, mut clients) = create_server_and_clients_default::<
@@ -206,7 +210,7 @@ fn client_update_some_error_incoming_too_large() {
         WORKER_COUNT.some,
     );
     let mut client = ClientBuilder::new()
-        .incoming_max_size(INCOMING_SIZE_MINIMUM)
+        .incoming_max_size(INCOMING_MESSAGE_SIZE.minimum)
         .build::<ServerToClientMessage, ClientToServerMessage>()
         .unwrap();
     client.connect(create_test_socket(port)).unwrap();
@@ -257,9 +261,11 @@ fn client_update_some_error_incoming_too_large() {
     server.stop();
 }
 
-create_test_message!(IncomingDeserializeError, { Ok(OUTGOING_SIZE_DEFAULT) }, {
-    Err(())
-});
+create_test_message!(
+    IncomingDeserializeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default) },
+    { Err(()) }
+);
 #[test]
 fn client_update_some_error_incoming_message_error() {
     let (mut server, mut clients) = create_server_and_clients_default::<

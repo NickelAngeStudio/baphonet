@@ -26,7 +26,7 @@ use std::time::Duration;
 use baphonet::Message;
 use baphonet::client::Client;
 use baphonet::client::builder::ClientBuilder;
-use baphonet::server::{ClientId, POOL_RATE_PER_SECOND_MAXIMUM, Server, ServerBuilder};
+use baphonet::server::{ClientId, POOL_RATE_PER_SECOND, Server, ServerBuilder};
 
 use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
@@ -211,7 +211,7 @@ pub fn create_server_and_port_max_pool<
     let mut server = ServerBuilder::new()
         .maximum_client(max_client)
         .worker(worker_count)
-        .pool_rate(POOL_RATE_PER_SECOND_MAXIMUM)
+        .pool_rate(POOL_RATE_PER_SECOND.maximum)
         .build()
         .unwrap();
     let mut port: u16 = TEST_TCP_PORT;

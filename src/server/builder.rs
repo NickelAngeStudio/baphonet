@@ -23,11 +23,8 @@
 use crate::{
     Message,
     server::{
-        INCOMING_SIZE_DEFAULT, INCOMING_SIZE_MAXIMUM, INCOMING_SIZE_MINIMUM, MAXCLIENT_DEFAULT,
-        MAXCLIENT_MAXIMUM, MAXCLIENT_MINIMUM, OUTGOING_SIZE_DEFAULT, OUTGOING_SIZE_MAXIMUM,
-        OUTGOING_SIZE_MINIMUM, POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MAXIMUM,
-        POOL_RATE_PER_SECOND_MINIMUM, Server, WORKER_COUNT_DEFAULT, WORKER_COUNT_MINIMUM,
-        error::ErrorServer,
+        ErrorServer, INCOMING_MESSAGE_SIZE, MAXIMUM_CLIENT_SIZE, OUTGOING_MESSAGE_SIZE,
+        POOL_RATE_PER_SECOND, SERVER_WORKER_COUNT, Server,
     },
 };
 
@@ -53,11 +50,11 @@ impl ServerBuilder {
     /// Create a new [`ServerBuilder`] instance.
     pub fn new() -> ServerBuilder {
         ServerBuilder {
-            maximum_client: MAXCLIENT_DEFAULT,
-            worker_count: WORKER_COUNT_DEFAULT,
-            pool_rate: POOL_RATE_PER_SECOND_DEFAULT,
-            incoming_max_size: INCOMING_SIZE_DEFAULT,
-            outgoing_max_size: OUTGOING_SIZE_DEFAULT,
+            maximum_client: MAXIMUM_CLIENT_SIZE.default,
+            worker_count: SERVER_WORKER_COUNT.default,
+            pool_rate: POOL_RATE_PER_SECOND.default,
+            incoming_max_size: INCOMING_MESSAGE_SIZE.default,
+            outgoing_max_size: OUTGOING_MESSAGE_SIZE.default,
         }
     }
 
@@ -142,35 +139,54 @@ impl ServerBuilder {
     pub fn build<IN: Message + Send + 'static, OUT: Message + Send + 'static>(
         &self,
     ) -> Result<Server<IN, OUT>, ErrorServer> {
-        if self.maximum_client < MAXCLIENT_MINIMUM {
-            return Err(ErrorServer::MaximumClientBelowMinimum);
+        match MAXIMUM_CLIENT_SIZE.compare(&self.maximum_client) {
+            crate::ConstRangeCompare::InRange => {}
+            crate::ConstRangeCompare::BelowMinimum => {
+                return Err(ErrorServer::MaximumClientBelowMinimum);
+            }
+            crate::ConstRangeCompare::AboveMaximum => {
+                return Err(ErrorServer::MaximumClientAboveMaximum);
+            }
         }
-        if self.maximum_client > MAXCLIENT_MAXIMUM {
-            return Err(ErrorServer::MaximumClientAboveMaximum);
+
+        match SERVER_WORKER_COUNT.compare(&self.worker_count) {
+            crate::ConstRangeCompare::InRange => {}
+            crate::ConstRangeCompare::BelowMinimum => {
+                return Err(ErrorServer::WorkerCountBelowMinimum);
+            }
+            crate::ConstRangeCompare::AboveMaximum => {
+                return Err(ErrorServer::WorkerCountAboveMaximum);
+            }
         }
-        if self.worker_count < WORKER_COUNT_MINIMUM {
-            return Err(ErrorServer::WorkerCountBelowMinimum);
+
+        match POOL_RATE_PER_SECOND.compare(&self.pool_rate) {
+            crate::ConstRangeCompare::InRange => {}
+            crate::ConstRangeCompare::BelowMinimum => {
+                return Err(ErrorServer::PoolRateBelowMinimum);
+            }
+            crate::ConstRangeCompare::AboveMaximum => {
+                return Err(ErrorServer::PoolRateAboveMaximum);
+            }
         }
-        if self.worker_count > self.maximum_client {
-            return Err(ErrorServer::WorkerCountAboveMaximum);
+
+        match INCOMING_MESSAGE_SIZE.compare(&self.incoming_max_size) {
+            crate::ConstRangeCompare::InRange => {}
+            crate::ConstRangeCompare::BelowMinimum => {
+                return Err(ErrorServer::IncomingMessageSizeBelowMinimum);
+            }
+            crate::ConstRangeCompare::AboveMaximum => {
+                return Err(ErrorServer::IncomingMessageSizeAboveMaximum);
+            }
         }
-        if self.pool_rate < POOL_RATE_PER_SECOND_MINIMUM {
-            return Err(ErrorServer::PoolRateBelowMinimum);
-        }
-        if self.pool_rate > POOL_RATE_PER_SECOND_MAXIMUM {
-            return Err(ErrorServer::PoolRateAboveMaximum);
-        }
-        if self.incoming_max_size < INCOMING_SIZE_MINIMUM {
-            return Err(ErrorServer::IncomingMessageSizeBelowMinimum);
-        }
-        if self.incoming_max_size > INCOMING_SIZE_MAXIMUM {
-            return Err(ErrorServer::IncomingMessageSizeAboveMaximum);
-        }
-        if self.outgoing_max_size < OUTGOING_SIZE_MINIMUM {
-            return Err(ErrorServer::OutgoingMessageSizeBelowMinimum);
-        }
-        if self.outgoing_max_size > OUTGOING_SIZE_MAXIMUM {
-            return Err(ErrorServer::OutgoingMessageSizeAboveMaximum);
+
+        match OUTGOING_MESSAGE_SIZE.compare(&self.outgoing_max_size) {
+            crate::ConstRangeCompare::InRange => {}
+            crate::ConstRangeCompare::BelowMinimum => {
+                return Err(ErrorServer::OutgoingMessageSizeBelowMinimum);
+            }
+            crate::ConstRangeCompare::AboveMaximum => {
+                return Err(ErrorServer::OutgoingMessageSizeAboveMaximum);
+            }
         }
 
         Ok(Server::<IN, OUT>::build(&self))
@@ -181,12 +197,9 @@ impl ServerBuilder {
 mod tests {
     use crate::{
         Message,
-        client::POOL_RATE_PER_SECOND_MAXIMUM,
         server::{
-            INCOMING_SIZE_DEFAULT, INCOMING_SIZE_MAXIMUM, INCOMING_SIZE_MINIMUM, MAXCLIENT_DEFAULT,
-            MAXCLIENT_MAXIMUM, MAXCLIENT_MINIMUM, OUTGOING_SIZE_MAXIMUM, OUTGOING_SIZE_MINIMUM,
-            POOL_RATE_PER_SECOND_DEFAULT, POOL_RATE_PER_SECOND_MINIMUM, Server, ServerBuilder,
-            WORKER_COUNT_DEFAULT, WORKER_COUNT_MINIMUM, error::ErrorServer,
+            INCOMING_MESSAGE_SIZE, MAXIMUM_CLIENT_SIZE, OUTGOING_MESSAGE_SIZE,
+            POOL_RATE_PER_SECOND, SERVER_WORKER_COUNT, Server, ServerBuilder, error::ErrorServer,
         },
     };
 
@@ -216,36 +229,41 @@ mod tests {
     #[test]
     fn server_builder_new_default() {
         let builder = ServerBuilder::new();
-        assert_eq!(builder.maximum_client, MAXCLIENT_DEFAULT);
-        assert_eq!(builder.worker_count, WORKER_COUNT_DEFAULT);
-        assert_eq!(builder.pool_rate, POOL_RATE_PER_SECOND_DEFAULT);
-        assert_eq!(builder.incoming_max_size, INCOMING_SIZE_DEFAULT);
+        assert_eq!(builder.maximum_client, MAXIMUM_CLIENT_SIZE.default);
+        assert_eq!(builder.worker_count, SERVER_WORKER_COUNT.default);
+        assert_eq!(builder.pool_rate, POOL_RATE_PER_SECOND.default);
+        assert_eq!(builder.incoming_max_size, INCOMING_MESSAGE_SIZE.default);
+        assert_eq!(builder.outgoing_max_size, OUTGOING_MESSAGE_SIZE.default);
         let server = builder.build::<TestMessage, TestMessage>().unwrap();
         assert_server_builder(&server, &builder);
     }
 
     #[test]
     fn server_builder_new_modified() {
-        let max_client = MAXCLIENT_MINIMUM + 1;
-        let worker_count = WORKER_COUNT_MINIMUM + 1;
-        let pool_rate = POOL_RATE_PER_SECOND_MINIMUM + 1;
-        let incoming_max_size = INCOMING_SIZE_MINIMUM + 1;
+        let max_client = MAXIMUM_CLIENT_SIZE.minimum + 1;
+        let worker_count = SERVER_WORKER_COUNT.minimum + 1;
+        let pool_rate = POOL_RATE_PER_SECOND.minimum + 1;
+        let incoming_max_size = INCOMING_MESSAGE_SIZE.minimum + 1;
+        let outgoing_max_size = OUTGOING_MESSAGE_SIZE.minimum + 1;
         let builder = ServerBuilder::new()
             .maximum_client(max_client)
             .worker(worker_count)
             .pool_rate(pool_rate)
-            .incoming_max_size(incoming_max_size);
+            .incoming_max_size(incoming_max_size)
+            .outgoing_max_size(outgoing_max_size);
+
         assert_eq!(builder.maximum_client, max_client);
         assert_eq!(builder.worker_count, worker_count);
         assert_eq!(builder.pool_rate, pool_rate);
         assert_eq!(builder.incoming_max_size, incoming_max_size);
+        assert_eq!(builder.outgoing_max_size, outgoing_max_size);
         let server = builder.build::<TestMessage, TestMessage>().unwrap();
         assert_server_builder(&server, &builder);
     }
 
     #[test]
     fn server_builder_err_client_below_min() {
-        let builder = ServerBuilder::new().maximum_client(MAXCLIENT_MINIMUM - 1);
+        let builder = ServerBuilder::new().maximum_client(MAXIMUM_CLIENT_SIZE.minimum - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::MaximumClientBelowMinimum),
@@ -254,7 +272,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_client_above_max() {
-        let builder = ServerBuilder::new().maximum_client(MAXCLIENT_MAXIMUM + 1);
+        let builder = ServerBuilder::new().maximum_client(MAXIMUM_CLIENT_SIZE.maximum + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::MaximumClientAboveMaximum),
@@ -263,7 +281,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_worker_below_min() {
-        let builder = ServerBuilder::new().worker(WORKER_COUNT_MINIMUM - 1);
+        let builder = ServerBuilder::new().worker(SERVER_WORKER_COUNT.minimum - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::WorkerCountBelowMinimum),
@@ -272,7 +290,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_worker_above_max() {
-        let builder = ServerBuilder::new().worker(MAXCLIENT_DEFAULT + 1);
+        let builder = ServerBuilder::new().worker(SERVER_WORKER_COUNT.maximum + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::WorkerCountAboveMaximum),
@@ -281,7 +299,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_poolrate_below_min() {
-        let builder = ServerBuilder::new().pool_rate(POOL_RATE_PER_SECOND_MINIMUM - 1);
+        let builder = ServerBuilder::new().pool_rate(POOL_RATE_PER_SECOND.minimum - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::PoolRateBelowMinimum),
@@ -290,7 +308,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_poolrate_above_max() {
-        let builder = ServerBuilder::new().pool_rate(POOL_RATE_PER_SECOND_MAXIMUM + 1);
+        let builder = ServerBuilder::new().pool_rate(POOL_RATE_PER_SECOND.maximum + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::PoolRateAboveMaximum),
@@ -299,7 +317,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_incoming_max_below_min() {
-        let builder = ServerBuilder::new().incoming_max_size(INCOMING_SIZE_MINIMUM - 1);
+        let builder = ServerBuilder::new().incoming_max_size(INCOMING_MESSAGE_SIZE.minimum - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::IncomingMessageSizeBelowMinimum),
@@ -308,7 +326,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_incoming_max_above_max() {
-        let builder = ServerBuilder::new().incoming_max_size(INCOMING_SIZE_MAXIMUM + 1);
+        let builder = ServerBuilder::new().incoming_max_size(INCOMING_MESSAGE_SIZE.maximum + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::IncomingMessageSizeAboveMaximum),
@@ -317,7 +335,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_outgoing_max_below_min() {
-        let builder = ServerBuilder::new().outgoing_max_size(OUTGOING_SIZE_MINIMUM - 1);
+        let builder = ServerBuilder::new().outgoing_max_size(OUTGOING_MESSAGE_SIZE.minimum - 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::OutgoingMessageSizeBelowMinimum),
@@ -326,7 +344,7 @@ mod tests {
 
     #[test]
     fn server_builder_err_outgoing_max_above_max() {
-        let builder = ServerBuilder::new().outgoing_max_size(OUTGOING_SIZE_MAXIMUM + 1);
+        let builder = ServerBuilder::new().outgoing_max_size(OUTGOING_MESSAGE_SIZE.maximum + 1);
         match builder.build::<TestMessage, TestMessage>() {
             Ok(_) => panic!("Shouldn't be Ok()!"),
             Err(err) => assert_eq!(err, ErrorServer::OutgoingMessageSizeAboveMaximum),

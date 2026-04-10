@@ -166,13 +166,16 @@ impl<OUT: Message + Send> OutgoingMessage<OUT> {
 /// Message received by client
 #[derive(Debug, Clone)]
 pub struct IncomingMessage<IN: Message + Send> {
-    pub client: ClientId,
+    pub client_id: ClientId,
     pub message: IN,
 }
 
 impl<IN: Message + Send> IncomingMessage<IN> {
     /// Create a new server incoming message
     pub fn new(client: ClientId, message: IN) -> IncomingMessage<IN> {
-        IncomingMessage { client, message }
+        IncomingMessage {
+            client_id: client,
+            message,
+        }
     }
 }

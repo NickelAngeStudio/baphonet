@@ -27,8 +27,8 @@ use std::{
 
 use baphonet::{
     Message,
-    client::{self, ClientBuilder, ClientUpdate},
-    server::{self, POOL_RATE_PER_SECOND_MAXIMUM, message::ServerUpdate},
+    client::{self, ClientBuilder, ClientUpdate, POOL_RATE_PER_SECOND},
+    server::{self, message::ServerUpdate},
 };
 
 use crate::{
@@ -105,7 +105,7 @@ fn client_stress_test() {
         WORKER_COUNT.all,
     );
     let mut client = ClientBuilder::new()
-        .pool_rate(POOL_RATE_PER_SECOND_MAXIMUM)
+        .pool_rate(POOL_RATE_PER_SECOND.maximum)
         .build::<StCMessage, CtSMessage>()
         .unwrap();
     client.connect(create_test_socket(port)).unwrap();

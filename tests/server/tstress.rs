@@ -21,27 +21,21 @@
 // SOFTWARE.
 
 use std::{
-    iter::Inspect,
+    io::Write,
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use baphonet::{
     Message,
-    client::{self, Client},
-    server::{self, ClientId, POOL_RATE_PER_SECOND, ServerBuilder},
+    client::{self},
+    server::{self, ServerBuilder},
 };
 
-use crate::shared::{
-    CLIENT_SIZE, TEST_TCP_PORT, WORKER_COUNT, close_clients, create_connect_clients,
-    create_test_socket,
-};
+use crate::shared::{TEST_TCP_PORT, close_clients, create_connect_clients, create_test_socket};
 
-/// Count of message sent per client
-const CLIENT_MESSAGE_SENT: usize = u16::MAX as usize;
-
-/// Time between each message sent per thread
-const TIME_BETWEEN_MESSAGE: Duration = Duration::from_micros(1);
+/// Column width of result
+const COLUMN_WIDTH: usize = 6;
 
 const MAX_TIME_PER_CLIENT_THREAD: Duration = Duration::from_secs(600);
 
@@ -86,21 +80,55 @@ impl Message for CtSMessage {
 
 /// Multiple clients will blast the server with messages.
 /// The server will acknowledge each message received.
+///
+/// The results help finding the best worker count.
 #[test]
 #[ignore = "Long run time"]
 fn server_stress_test() {
-    let dur1 =
-        server_stress_with_worker_count(CLIENT_SIZE.all, 1, POOL_RATE_PER_SECOND.default, 16384);
+    // Vector of message count for tests
+    let msg_count: Vec<usize> = vec![256, 1024, 4096];
 
-    let dur16 = server_stress_with_worker_count(
-        CLIENT_SIZE.all,
-        WORKER_COUNT.all,
-        POOL_RATE_PER_SECOND.default,
-        16384,
-    );
+    // Vector of pool rate for tests
+    let pool_rate: Vec<u64> = vec![30, 60, 120, 240];
 
-    println!("Dur1={}", dur1.as_millis());
-    println!("Dur16={}", dur16.as_millis());
+    // Vector of maximum clients for tests
+    let max_client: Vec<usize> = vec![32, 64, 128, 256];
+
+    // Vector of worker count for tests
+    let worker_count: Vec<usize> = vec![1, 2, 4, 8, 16, 32];
+
+    let total_width = worker_count.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
+
+    // Keep track of best worker of each categories
+    let mut best_worker_count = Vec::<usize>::new();
+    best_worker_count.resize(worker_count.len(), 0);
+
+    for maxc in &max_client {
+        write_table_header(&worker_count);
+
+        for msgc in &msg_count {
+            for pr in &pool_rate {
+                table_line_header(*maxc, *msgc, *pr);
+
+                let mut results = Vec::<u128>::new();
+                results.resize(worker_count.len(), 0);
+                let mut res_index: usize = 0;
+
+                for wc in &worker_count {
+                    let duration = server_stress_with_worker_count(*maxc, *wc, *pr, *msgc);
+                    line_result(duration.as_millis());
+
+                    results[res_index] = duration.as_millis();
+                    res_index += 1;
+                }
+                print!(" *\n");
+                increment_best_worker(&mut best_worker_count, &results);
+            }
+            println!("*-{}", align_right(format!("*"), total_width - 2, '-',));
+        }
+    }
+
+    write_table_footer(total_width, &worker_count, &best_worker_count);
 }
 
 fn server_stress_with_worker_count(
@@ -109,11 +137,6 @@ fn server_stress_with_worker_count(
     pool_rate: u64,
     messages_per_client: usize,
 ) -> Duration {
-    println!(
-        "*** SERVER STRESS STARTED [{} clients, {} workers, {} pool_rate] ***",
-        client_count, worker_count, pool_rate
-    );
-
     let mut server = ServerBuilder::new()
         .maximum_client(client_count)
         .worker(worker_count)
@@ -132,7 +155,6 @@ fn server_stress_with_worker_count(
 
     let mut clients = create_connect_clients::<StCMessage, CtSMessage>(client_count, port);
 
-    thread::sleep(Duration::from_millis(10));
     let mut handles = Vec::<JoinHandle<()>>::new();
 
     for client_id in 0..client_count {
@@ -162,12 +184,130 @@ fn server_stress_with_worker_count(
     close_clients(&mut clients);
     server.stop();
 
-    println!(
-        "*** SERVER STRESS ENDED [{} clients, {} workers, {} pool_rate] ***",
-        client_count, worker_count, pool_rate
-    );
-
     duration
+}
+
+/// Ugly code for pretty result
+fn write_table_footer(
+    total_width: usize,
+    worker_count: &Vec<usize>,
+    best_worker_count: &Vec<usize>,
+) {
+    // Write workers results
+    println!("*={}", align_right(format!("*"), total_width - 2, '=',));
+    print!("*                    |");
+
+    for wc in worker_count {
+        print!("{}", align_right(format!("{}", *wc), COLUMN_WIDTH, ' ',));
+    }
+    print!(" *\n");
+
+    println!("*={}", align_right(format!("*"), total_width - 2, '=',));
+    let base_line = format!(
+        "[{}] WORKERS BEST  |",
+        get_best_worker_count(&best_worker_count, &worker_count)
+    );
+    print!("* ");
+    print!("{}", align_right(base_line, 20, ' '));
+
+    for bw in best_worker_count {
+        print!("{}", align_right(format!("{}", bw), COLUMN_WIDTH, ' ',));
+    }
+    print!(" *\n");
+    println!("*={}", align_right(format!("*"), total_width - 2, '=',));
+}
+
+fn line_result(duration: u128) {
+    print!(
+        "{}",
+        align_right(format!("{}", duration), COLUMN_WIDTH, ' ',)
+    );
+    std::io::stdout().flush().unwrap();
+}
+
+fn table_line_header(max_client: usize, msg_count: usize, pool_rate: u64) {
+    print!(
+        "* {}",
+        align_left(format!("{}", max_client), COLUMN_WIDTH, ' ')
+    );
+    print!(
+        "{}",
+        align_right(format!("{}", msg_count), COLUMN_WIDTH, ' ')
+    );
+    print!(
+        "{} |",
+        align_right(format!("{}", pool_rate), COLUMN_WIDTH, ' ')
+    );
+}
+
+fn get_best_worker_count(best_worker: &Vec<usize>, worker_count: &Vec<usize>) -> usize {
+    let mut best_index: usize = 0;
+
+    for index in 0..best_worker.len() {
+        if best_worker[index] > best_worker[best_index] {
+            best_index = index;
+        }
+    }
+
+    worker_count[best_index]
+}
+
+/// Increment the best worker according to results.
+fn increment_best_worker(best_worker: &mut Vec<usize>, results: &Vec<u128>) {
+    let mut best_index: usize = 0;
+
+    for index in 0..results.len() {
+        if results[index] < results[best_index] {
+            best_index = index;
+        }
+    }
+
+    best_worker[best_index] += 1;
+}
+
+fn align_left(value: String, length: usize, chr: char) -> String {
+    let mut formatted = value.clone();
+
+    loop {
+        if formatted.len() >= length {
+            break;
+        }
+
+        formatted.push(chr);
+    }
+
+    formatted
+}
+
+/// This code is ugly, only made it so result are pretty.
+fn write_table_header(worker_count: &Vec<usize>) {
+    let total_width = worker_count.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
+
+    println!("{}", align_right(format!("*"), total_width, '*',));
+
+    print!("{}", align_left(format!("CLIENTS"), COLUMN_WIDTH + 2, ' '));
+    print!("{}", "  MSGS");
+    print!("{}", "    PR |");
+
+    for wc in worker_count {
+        print!("{}", align_right(format!("{}", *wc), COLUMN_WIDTH, ' '));
+    }
+    print!(" *\n");
+    println!("{}", align_right(format!("*"), total_width, '*',));
+}
+
+fn align_right(value: String, length: usize, chr: char) -> String {
+    let mut formatted = value.clone();
+
+    loop {
+        if formatted.len() >= length {
+            break;
+        }
+
+        formatted.insert(0, chr);
+    }
+
+    formatted
 }
 
 fn handle_client_transmitter(
@@ -181,10 +321,7 @@ fn handle_client_transmitter(
                 payload: client_id as u16,
             })
             .unwrap();
-
-        //thread::sleep(TIME_BETWEEN_MESSAGE);
     }
-    println!("Client ({}) Send finished!", client_id);
 }
 
 fn handle_client_transceiver(
@@ -194,19 +331,8 @@ fn handle_client_transceiver(
 ) {
     let total_to_receive: usize = messages_per_client;
     let mut sum_recv: usize = 0;
-    let transmitter = transceiver.transmitter();
 
     loop {
-        // Send
-        //println!("Client ({}) send {}.", client_id, sum_recv + 1);
-
-        // Send waves of 256 messages.
-        //transmitter
-        //    .send(CtSMessage {
-        //        payload: client_id as u16,
-        //    })
-        //    .unwrap();
-
         // Wait answer
         match transceiver.receive_timeout(MAX_TIME_PER_CLIENT_THREAD) {
             Ok(msg) => {
@@ -214,15 +340,6 @@ fn handle_client_transceiver(
                 assert_eq!(msg.payload, client_id as u16);
 
                 sum_recv += 1;
-
-                //println!("Client ({}) received {}.", client_id, sum_recv);
-
-                //if sum_recv % 1000 == 0 {
-                //    println!(
-                //        "Client ({}) Received {} of {} messages.",
-                //        client_id, sum_recv, total_to_receive
-                //    )
-                //}
             }
             Err(err) => match err {
                 client::ErrorTransceiver::ChannelDisconnected => {
@@ -236,11 +353,6 @@ fn handle_client_transceiver(
             break;
         }
     }
-
-    println!(
-        "Client ({}) received {} messages!",
-        client_id, total_to_receive
-    );
 }
 
 fn handle_server_transceiver(
@@ -250,7 +362,6 @@ fn handle_server_transceiver(
 ) {
     let total_to_receive: usize = client_count * messages_per_client;
     let mut sum_recv: usize = 0;
-    let trigger = messages_per_client / 20;
 
     loop {
         match transceiver.receive_timeout(MAX_TIME_PER_CLIENT_THREAD) {
@@ -272,10 +383,6 @@ fn handle_server_transceiver(
                     .unwrap();
 
                 sum_recv += 1;
-
-                if sum_recv % trigger == 0 {
-                    println!("RECEIVED AND SENT {} of {}...", sum_recv, total_to_receive)
-                }
             }
             Err(_) => panic!("Server Receive timedout!"),
         }
@@ -284,6 +391,4 @@ fn handle_server_transceiver(
             break;
         }
     }
-
-    println!("SERVER RECEIVED AND SENT {} MESSAGES!", total_to_receive);
 }

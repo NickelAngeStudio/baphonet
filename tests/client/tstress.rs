@@ -49,7 +49,7 @@ const SERVER_TOTAL_MESSAGE_TO_RECEIVE: usize =
 /// Number of client thread sending messages
 const CLIENT_TRANSMITTER_THREAD: usize = 4;
 
-/// Count of message sent per server thread
+/// Count of message sent per client thread
 const CLIENT_MESSAGE_TO_SEND_PER_THREAD: usize = u16::MAX as usize;
 
 /// Total message to send from client

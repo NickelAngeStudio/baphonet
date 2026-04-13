@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
@@ -28,8 +26,7 @@ use std::time::Duration;
 use baphonet::Message;
 use baphonet::client::Client;
 use baphonet::client::builder::ClientBuilder;
-use baphonet::server::message::OutgoingMessage;
-use baphonet::server::{ClientId, MAXIMUM_POOL_RATE_PER_SECOND, Server, ServerBuilder};
+use baphonet::server::{ClientId, POOL_RATE_PER_SECOND, Server, ServerBuilder};
 
 use crate::shared::message::{ClientToServerMessage, ServerToClientMessage};
 
@@ -75,6 +72,24 @@ pub const TEST_TCP_PORT: u16 = 50000;
 
 /// Maximum loop wait time.
 pub const LOOP_WAIT_TIME: Duration = std::time::Duration::from_millis(5000);
+
+/// Run test in serial mode
+#[macro_export]
+macro_rules! run_tests {
+    ($main_fn : ident ( $($test_fn : ident),+ )) => {
+        #[test]
+        fn $main_fn() {
+            $(
+            print!("Running `{}`... ", stringify!($test_fn));
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            $test_fn();
+            print!("ok\n");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            )+
+        }
+
+    };
+}
 
 #[macro_export]
 macro_rules! timeout_loop {
@@ -155,14 +170,16 @@ pub fn create_server_and_clients<IN: Message + Send + 'static, OUT: Message + Se
         Some(update) => match update {
             baphonet::server::message::ServerUpdate::ClientConnected(_, _) => {
                 sum_client += 1;
-                if sum_client == client_count {
-                    break;
-                }
+
             }
             _ => {}
         },
         None => {}
-    });
+    }
+    if sum_client == client_count {
+        break;
+    }
+    );
 
     (server, clients)
 }
@@ -212,7 +229,7 @@ pub fn create_server_and_port_max_pool<
     let mut server = ServerBuilder::new()
         .maximum_client(max_client)
         .worker(worker_count)
-        .pool_rate(MAXIMUM_POOL_RATE_PER_SECOND)
+        .pool_rate(POOL_RATE_PER_SECOND.maximum)
         .build()
         .unwrap();
     let mut port: u16 = TEST_TCP_PORT;

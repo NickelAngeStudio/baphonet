@@ -253,29 +253,15 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
         match msg.serialize(buffer) {
             Ok(size) => {
                 if size <= self.outgoing_max_size {
-                    // Get bytes of message size
-                    let size_bytes = (size as u16).to_le_bytes();
-
-                    // Send size
-                    match tcp_stream.write_all(&size_bytes) {
-                        Ok(_) => {
-                            // Send message
-                            match tcp_stream.write_all(&buffer[..size]) {
-                                Ok(_) => {}
-                                Err(err) => match err.kind() {
-                                    std::io::ErrorKind::WouldBlock => self.requeue_message(msg),
-                                    _ => {
-                                        self.handle_connection_lost();
-                                    }
-                                },
-                            }
+                    // Flush the TCP Stream before trying to send message
+                    match Write::flush(tcp_stream) {
+                        Ok(_) => self.send_write_message(size, tcp_stream, buffer),
+                        Err(_) => {
+                            // Message is dropped if buffer can't be flushed
+                            self.update_client(ClientUpdate::Error(
+                                ErrorWorker::TcpStreamBufferFull,
+                            ))
                         }
-                        Err(err) => match err.kind() {
-                            std::io::ErrorKind::WouldBlock => self.requeue_message(msg),
-                            _ => {
-                                self.handle_connection_lost();
-                            }
-                        },
                     }
                 } else {
                     self.update_client(ClientUpdate::Error(
@@ -286,6 +272,33 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
             Err(_) => self.update_client(ClientUpdate::Error(
                 crate::client::error::ErrorWorker::OutgoingSerializeError,
             )),
+        }
+    }
+
+    /// Write the message to the tcp stream
+    #[inline]
+    fn send_write_message(&mut self, size: usize, tcp_stream: &mut TcpStream, buffer: &mut [u8]) {
+        // Get bytes of message size
+        let size_bytes = (size as u16).to_le_bytes();
+
+        // Send size
+        match tcp_stream.write_all(&size_bytes) {
+            Ok(_) => {
+                // Send message
+                match tcp_stream.write_all(&buffer[..size]) {
+                    Ok(_) => {}
+                    Err(err) => match err.kind() {
+                        _ => {
+                            self.handle_connection_lost();
+                        }
+                    },
+                }
+            }
+            Err(err) => match err.kind() {
+                _ => {
+                    self.handle_connection_lost();
+                }
+            },
         }
     }
 
@@ -341,18 +354,5 @@ impl<IN: Message + Send + 'static, OUT: Message + Send + 'static> Worker<IN, OUT
                 self.status = Status::Ended;
             }
         }
-    }
-
-    /// Put unsent message back on pile when sending a message would block.
-    fn requeue_message(&mut self, message: OUT) {
-        /*
-        match self.channels.sdr_worker.send(WorkerMessage::Send(message)) {
-            Ok(_) => {}
-            Err(_) => {
-                // Channel is closed, communication to client is lost, end worker.
-                self.status = Status::Ended;
-            }
-        }
-        */
     }
 }

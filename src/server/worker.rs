@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use std::{
     io::{Read, Write},
@@ -78,6 +76,9 @@ pub(crate) struct Worker<IN: Message + Send, OUT: Message + Send> {
     /// Maximum size of incoming message
     incoming_max_size: usize,
 
+    /// Maximum size of outgoing message
+    outgoing_max_size: usize,
+
     /// Shared TCP listener
     listener: Option<Arc<Mutex<TcpListener>>>,
 
@@ -96,12 +97,14 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     pub fn new(
         worker_id: WorkerId,
         incoming_max_size: usize,
+        outgoing_max_size: usize,
         clients: Clients,
         channels: WorkerChannel<IN, OUT>,
     ) -> Worker<IN, OUT> {
         Worker {
             worker_id,
             incoming_max_size,
+            outgoing_max_size,
             listener: None,
             clients,
             status: Status::Inactive,
@@ -333,7 +336,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                             u16::from_le_bytes(buffer[..SIZE_OF_MESSAGE_SIZE].try_into().unwrap())
                                 as usize;
 
-                        if size <= MAXIMUM_MESSAGE_SIZE {
+                        if size <= self.incoming_max_size {
                             Some(size)
                         } else {
                             // Clear stream.
@@ -376,7 +379,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                     Err(_) => {
                         Self::clear_stream(&mut client.stream, buffer); // Clear stream
                         self.send_message_to_supervisor(SupervisorWorkerMessage::Error(
-                            ErrorUpdate::IncomingMessageError(client_id),
+                            ErrorUpdate::IncomingMessageDeserializeError(client_id),
                         ));
                         None
                     }
@@ -400,7 +403,7 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
     fn handle_worker_send(&mut self, buffer: &mut Vec<u8>, message: OutgoingMessage<OUT>) {
         match message.message.serialize(buffer) {
             Ok(size) => {
-                if size > MAXIMUM_MESSAGE_SIZE {
+                if size > self.outgoing_max_size {
                     self.send_message_to_supervisor(SupervisorWorkerMessage::Error(
                         ErrorUpdate::OutgoingMessageTooLarge,
                     ));
@@ -413,18 +416,26 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                     // For each destination
                     for client_id in message.destinations {
                         get_client_from_id! { self, client, clients, client_id,
-                            // Send size
-                            match client.stream.write_all(&size_bytes) {
+
+                            match Write::flush(&mut client.stream) {
                                 Ok(_) => {
-                                    // Send message
-                                     match client.stream.write_all(&buffer[..size]) {
+                                    // Send size
+                                    match client.stream.write_all(&size_bytes) {
                                         Ok(_) => {
                                             // Send message
+                                             match client.stream.write_all(&buffer[..size]) {
+                                                Ok(_) => {
+                                                    // Send message
+                                                },
+                                                Err(_) => {
+                                                    self.handle_connection_lost(client, client_id); // Connection lost
+                                                }
+                                            }
                                         },
                                         Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
                                     }
                                 },
-                                Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
+                                Err(_) => self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::TcpStreamBufferFull(client_id))),
                             }
                         }
                     }

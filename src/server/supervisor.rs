@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use std::{
     net::{SocketAddr, TcpListener},
@@ -94,13 +92,19 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
         maximum_client: usize,
         worker_count: usize,
         incoming_max_size: usize,
+        outgoing_max_size: usize,
         pool_rate: u64,
         clients: Clients,
         channels: SupervisorChannel<IN, OUT>,
     ) -> Supervisor<IN, OUT> {
         // Create workers
-        let workers =
-            Self::create_workers(worker_count, incoming_max_size, clients.clone(), &channels);
+        let workers = Self::create_workers(
+            worker_count,
+            incoming_max_size,
+            outgoing_max_size,
+            clients.clone(),
+            &channels,
+        );
 
         // Return supervisor
         Supervisor {
@@ -319,6 +323,11 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
 
         // Notify server
         self.send_update_to_server(ServerUpdate::ClientConnected(client_id, socket));
+
+        // Notify if server full
+        if self.is_server_full() {
+            self.send_update_to_server(ServerUpdate::Full);
+        }
     }
 
     /// Handle received done worker message
@@ -352,6 +361,17 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
     #[inline]
     fn handle_worker_message_finished(&mut self, _worker_id: WorkerId) {
         // TODO: Determine if we recreate worker
+    }
+
+    /// Returns true if server is full
+    fn is_server_full(&mut self) -> bool {
+        for task in &self.tasks.reception {
+            if task.is_none() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Remove client from tasks and list
@@ -439,6 +459,7 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
     fn create_workers(
         worker_count: usize,
         incoming_max_size: usize,
+        outgoing_max_size: usize,
         clients: Clients,
         channels: &SupervisorChannel<IN, OUT>,
     ) -> Vec<SupervisorWorker> {
@@ -454,7 +475,13 @@ impl<IN: Message + Send, OUT: Message + Send> Supervisor<IN, OUT> {
                 channels.rcv_worker.clone(),
             );
 
-            let mut worker = Worker::new(id, incoming_max_size, clients.clone(), worker_channels);
+            let mut worker = Worker::new(
+                id,
+                incoming_max_size,
+                outgoing_max_size,
+                clients.clone(),
+                worker_channels,
+            );
 
             workers.push(SupervisorWorker {
                 sdr_inactive,

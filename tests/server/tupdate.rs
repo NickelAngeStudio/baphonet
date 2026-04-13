@@ -1,61 +1,308 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+use std::time::Duration;
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+use baphonet::Message;
+use baphonet::server::{
+    ClientId, ErrorUpdate, INCOMING_MESSAGE_SIZE, OUTGOING_MESSAGE_SIZE, ServerBuilder,
+    ServerUpdate,
+};
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
-use std::time::{Duration, Instant};
-
+use crate::run_tests;
 use crate::{
     shared::{
-        CLIENT_SIZE, WORKER_COUNT, accumulate, close_clients, compare_client_server_message,
-        create_server_and_clients, create_server_and_port,
+        CLIENT_SIZE, TEST_TCP_PORT, close_clients, create_connect_clients,
+        create_server_and_clients_default, create_test_socket,
         message::{ClientToServerMessage, ServerToClientMessage},
     },
     timeout_loop,
 };
-use baphonet::server::{ClientId, message::ServerUpdate};
 
-/// Message sent per client
-const MESSAGE_PER_CLIENT: usize = u8::MAX as usize;
+run_tests!(server_update_run_tests(
+    server_update_none,
+    server_update_some_active,
+    server_update_some_client_connected,
+    server_update_some_client_disconnected,
+    server_update_some_full,
+    server_update_some_inactive,
+    server_update_some_error_client_not_found,
+    server_update_some_error_outgoing_too_large,
+    server_update_some_error_outgoing_serialize_error,
+    server_update_some_error_incoming_too_large,
+    server_update_some_error_incoming_deserialize_error
+));
 
 #[test]
-fn server_message_none() {
-    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_none() {
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    assert!(server.update().is_none());
+
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_active() {
+    let mut server = ServerBuilder::new()
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1000;
+    server.start(create_test_socket(port)).unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Active => break,
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_client_connected() {
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1001;
+    server.start(create_test_socket(port)).unwrap();
+
+    let mut clients = create_connect_clients::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
-        WORKER_COUNT.all,
+        port,
     );
+
+    let mut sum_connected: usize = 0;
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::ClientConnected(_,_) => sum_connected += 1,
+                _ => {},
+            },
+            None => {},
+        }
+        if sum_connected == CLIENT_SIZE.all {
+            break;
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_client_disconnected() {
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1002;
+    server.start(create_test_socket(port)).unwrap();
+
+    let mut clients = create_connect_clients::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        port,
+    );
+
+    std::thread::sleep(Duration::from_millis(50));
 
     timeout_loop! {
         match server.update() {
             Some(_) => {},
-            None => break,
+            None => break ,
         }
     }
+
+    for client_id in 0..CLIENT_SIZE.all {
+        server.close_connection(client_id as ClientId).unwrap();
+    }
+
+    let mut sum_disconnected: usize = 0;
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::ClientDisconnected(_) => sum_disconnected += 1,
+                _ => {},
+            },
+            None => {},
+        }
+        if sum_disconnected == CLIENT_SIZE.all {
+            break;
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
 }
 
-/// Returns true if all message are received.
-fn is_all_received(msg_rcv: &Vec<usize>) -> bool {
-    for rcv in msg_rcv {
-        if *rcv != MESSAGE_PER_CLIENT {
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_full() {
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1003;
+    server.start(create_test_socket(port)).unwrap();
+
+    let mut clients = create_connect_clients::<ClientToServerMessage, ServerToClientMessage>(
+        CLIENT_SIZE.all,
+        port,
+    );
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Full => break,
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_inactive() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all);
+
+    server.stop();
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Inactive => break,
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+}
+
+#[test]
+fn server_update_some_error_connection_lost() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all);
+
+    let client_id: usize = CLIENT_SIZE.all / 2;
+    clients[client_id].close();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::ConnectionLost(id) => {
+                        assert_eq!(client_id, id as usize);
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_error_client_not_found() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        ClientToServerMessage,
+        ServerToClientMessage,
+    >(CLIENT_SIZE.all);
+
+    let base_cliend_not_found: usize = CLIENT_SIZE.all;
+    let client_id: usize = base_cliend_not_found;
+    let mut clients_ids: Vec<ClientId> = Vec::new();
+    for i in 0..CLIENT_SIZE.all {
+        clients_ids.push((CLIENT_SIZE.all + i) as ClientId);
+    }
+
+    let transceiver = server.transceiver().take().unwrap();
+    transceiver
+        .send(client_id as ClientId, ServerToClientMessage::control())
+        .unwrap();
+    transceiver
+        .send_vec(&clients_ids, ServerToClientMessage::control())
+        .unwrap();
+
+    let mut not_found_list = Vec::<bool>::new();
+    not_found_list.resize(CLIENT_SIZE.all, false);
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::ClientNotFound(id) => {
+                        not_found_list[(id as usize) - base_cliend_not_found] = true;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+        if is_all_not_found(&not_found_list){
+            break;
+        }
+    }
+
+    close_clients(&mut clients);
+    server.stop();
+}
+
+fn is_all_not_found(list: &Vec<bool>) -> bool {
+    for b in list {
+        if !b {
             return false;
         }
     }
@@ -63,149 +310,53 @@ fn is_all_received(msg_rcv: &Vec<usize>) -> bool {
     true
 }
 
-#[test]
-fn server_message_some_incoming_one_client() {
-    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.one);
-    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.one);
-    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.one);
-}
-
-#[test]
-fn server_message_some_incoming_some_client() {
-    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.some);
-    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.some);
-    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.some);
-}
-
-#[test]
-fn server_message_some_incoming_all_client() {
-    server_message_some_incoming_client(WORKER_COUNT.one, CLIENT_SIZE.all);
-    server_message_some_incoming_client(WORKER_COUNT.some, CLIENT_SIZE.all);
-    server_message_some_incoming_client(WORKER_COUNT.all, CLIENT_SIZE.all);
-}
-
-#[test]
-fn server_message_update_active() {
-    let (mut server, _) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
-        CLIENT_SIZE.all,
-        WORKER_COUNT.all,
-    );
-
-    timeout_loop! {
-        match server.update() {
-            Some(message) => match message {
-                ServerUpdate::Active => break,
-                _ => {}
-            },
-            None => {},
+macro_rules! create_test_message {
+    ($struct:ident, {$($serialize:tt)*}, {$($deserialize:tt)*}) => {
+        struct $struct {}
+        impl Message for $struct {
+            fn serialize(&self, _buffer: &mut [u8]) -> Result<usize, ()> {
+                $($serialize)*
+            }
+            fn deserialize(_buffer: &[u8]) -> Result<Self, ()>
+            where
+                Self: Sized,
+            {
+                $($deserialize)*
+            }
         }
-    }
+    };
 }
+
+create_test_message!(
+    OutgoingTooLargeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default + 1) },
+    { todo!() }
+);
 
 #[test]
-fn server_message_update_client_connected_one() {
-    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.one);
-    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.one);
-    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.one);
-}
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_error_outgoing_too_large() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        OutgoingTooLargeError,
+        OutgoingTooLargeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
 
-#[test]
-fn server_message_update_client_connected_some() {
-    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.some);
-    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.some);
-    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.some);
-}
+    server
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(0, OutgoingTooLargeError {})
+        .unwrap();
 
-#[test]
-fn server_message_update_client_connected_all() {
-    server_message_update_client_connected(WORKER_COUNT.one, CLIENT_SIZE.all);
-    server_message_update_client_connected(WORKER_COUNT.some, CLIENT_SIZE.all);
-    server_message_update_client_connected(WORKER_COUNT.all, CLIENT_SIZE.all);
-}
-
-#[test]
-fn server_message_update_client_disconnected_one() {
-    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.one);
-    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.one);
-    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.one);
-}
-
-#[test]
-fn server_message_update_client_disconnected_some() {
-    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.some);
-    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.some);
-    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.some);
-}
-
-#[test]
-fn server_message_update_client_disconnected_all() {
-    server_message_update_client_disconnected(WORKER_COUNT.one, CLIENT_SIZE.all);
-    server_message_update_client_disconnected(WORKER_COUNT.some, CLIENT_SIZE.all);
-    server_message_update_client_disconnected(WORKER_COUNT.all, CLIENT_SIZE.all);
-}
-
-#[test]
-fn server_message_update_pool_rate() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_full() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_connection_lost() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_client_not_found() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_outgoing_too_large() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_incoming_too_large() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_outgoing_serialize_error() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_error_incoming_deserialize_error() {
-    todo!()
-}
-
-#[test]
-fn server_message_update_ended() {
-    todo!()
-}
-
-/// Receive client connected update and add them up.
-fn server_message_update_client_connected(worker_count: usize, count: usize) {
-    let (mut server, mut clients) = create_server_and_clients::<
-        ClientToServerMessage,
-        ServerToClientMessage,
-    >(CLIENT_SIZE.all, worker_count, count);
-
-    let total_client_id: usize = accumulate(clients.len());
-    let mut sum_client_id: usize = 0;
     timeout_loop! {
         match server.update() {
-            Some(msg) => match msg {
-                ServerUpdate::ClientConnected(client_id, _) => {
-                    sum_client_id += client_id as usize;
-                    if sum_client_id == total_client_id {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::OutgoingMessageTooLarge => {
                         break;
-                    }
+                    },
+                    _ => {}
                 },
                 _ => {},
             },
@@ -213,94 +364,80 @@ fn server_message_update_client_connected(worker_count: usize, count: usize) {
         }
     }
 
-    close_clients(&mut clients);
-    server.stop().unwrap();
+    client.close();
+    server.stop();
 }
 
-/// Receive incoming message from parameters
-fn server_message_some_incoming_client(worker_count: usize, client_count: usize) {
-    let (mut server, mut clients) = create_server_and_clients::<
-        ClientToServerMessage,
-        ServerToClientMessage,
-    >(CLIENT_SIZE.all, worker_count, client_count);
+create_test_message!(OutgoingSerializeError, { Err(()) }, { todo!() });
 
-    let mut msg_rcv = Vec::<usize>::new();
-    msg_rcv.resize(clients.len(), 0);
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_error_outgoing_serialize_error() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        OutgoingSerializeError,
+        OutgoingSerializeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
 
-    for _ in 0..MESSAGE_PER_CLIENT {
-        for client in &mut clients {
-            client
-                .dispatcher()
-                .send(ClientToServerMessage::control())
-                .unwrap()
-        }
-    }
-
-    let instant = Instant::now();
-    let control = ClientToServerMessage::control();
-    let timeout = Duration::from_millis(100 * clients.len() as u64);
-    timeout_loop! { timeout,
-        match server.update(){
-            Some(msg) => {
-                match msg {
-                    ServerUpdate::Incoming(incoming_message) => {
-                        compare_client_server_message(&control, &incoming_message.message);
-                        msg_rcv[incoming_message.client as usize] += 1;
-                    },
-                    _ => {},
-                }
-            },
-            None => {},
-        }
-
-        if is_all_received(&msg_rcv){
-            break;
-        }
-
-    }
-
-    println!(
-        "server_message_some_incoming_client({},{}) {}ms elapsed",
-        worker_count,
-        client_count,
-        instant.elapsed().as_millis()
-    );
-
-    // Close clients
-    close_clients(&mut clients);
-
-    // Close server
-    server.stop().unwrap();
-}
-
-/// Receive client connected update and add them up.
-fn server_message_update_client_disconnected(worker_count: usize, count: usize) {
-    let (mut server, mut clients) = create_server_and_clients::<
-        ClientToServerMessage,
-        ServerToClientMessage,
-    >(CLIENT_SIZE.all, worker_count, count);
-
-    let total_client_id: usize = accumulate(clients.len());
-    let mut sum_client_id: usize = 0;
-
-    // Close each connection
-    for i in 0..clients.len() {
-        server.close_connection(i as ClientId).unwrap();
-    }
+    server
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(0, OutgoingSerializeError {})
+        .unwrap();
 
     timeout_loop! {
         match server.update() {
-            Some(msg) => match msg {
-                ServerUpdate::Update(update) => {
-                    match update {
-                        SupervisorUpdate::ClientDisconnected(client_id) => {
-                            sum_client_id += client_id as usize;
-                            if sum_client_id == total_client_id {
-                                break;
-                            }
-                        },
-                        _ => {},
-                    }
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::OutgoingMessageSerializeError => {
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    client.close();
+    server.stop();
+}
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_error_incoming_too_large() {
+    let mut server = ServerBuilder::new()
+        .maximum_client(CLIENT_SIZE.all)
+        .incoming_max_size(INCOMING_MESSAGE_SIZE.minimum)
+        .build::<ClientToServerMessage, ServerToClientMessage>()
+        .unwrap();
+
+    let port: u16 = TEST_TCP_PORT + 1004;
+    server.start(create_test_socket(port)).unwrap();
+
+    let mut clients = create_connect_clients::<ServerToClientMessage, ClientToServerMessage>(
+        CLIENT_SIZE.one,
+        port,
+    );
+
+    clients[0]
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(ClientToServerMessage::control())
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::IncomingMessageTooLarge(client_id) => {
+                        assert_eq!(client_id, 0);
+                        break;
+                    },
+                    _ => {}
                 },
                 _ => {},
             },
@@ -309,5 +446,47 @@ fn server_message_update_client_disconnected(worker_count: usize, count: usize) 
     }
 
     close_clients(&mut clients);
-    server.stop().unwrap();
+    server.stop();
+}
+
+create_test_message!(
+    IncomingDeserializeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.minimum) },
+    { Err(()) }
+);
+
+#[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
+fn server_update_some_error_incoming_deserialize_error() {
+    let (mut server, mut clients) = create_server_and_clients_default::<
+        IncomingDeserializeError,
+        IncomingDeserializeError,
+    >(CLIENT_SIZE.one);
+    let mut client = clients.pop().unwrap();
+
+    client
+        .transceiver()
+        .as_mut()
+        .unwrap()
+        .send(IncomingDeserializeError {})
+        .unwrap();
+
+    timeout_loop! {
+        match server.update() {
+            Some(update) => match update {
+                ServerUpdate::Error(error) => match error {
+                    ErrorUpdate::IncomingMessageDeserializeError(client_id) => {
+                        assert_eq!(client_id, 0);
+                        break;
+                    },
+                    _ => {}
+                },
+                _ => {},
+            },
+            None => {},
+        }
+    }
+
+    client.close();
+    server.stop();
 }

@@ -22,11 +22,14 @@
 
 use baphonet::{
     Message,
-    client::{ClientBuilder, ClientUpdate, ErrorWorker, OUTGOING_SIZE_DEFAULT},
-    server::{MINIMUM_INCOMING_SIZE, message::ServerUpdate},
+    client::{
+        ClientBuilder, ClientUpdate, ErrorWorker, INCOMING_MESSAGE_SIZE, OUTGOING_MESSAGE_SIZE,
+    },
+    server::message::ServerUpdate,
 };
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, WORKER_COUNT, create_server_and_clients_default, create_server_and_port,
         create_test_socket,
@@ -35,7 +38,19 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(client_update_run_tests(
+    client_update_none,
+    client_update_connected,
+    client_update_disconnected,
+    client_update_some_error_connection_lost,
+    client_update_some_error_outgoing_serialize,
+    client_update_some_error_outgoing_too_large,
+    client_update_some_error_incoming_too_large,
+    client_update_some_error_incoming_message_error
+));
+
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_none() {
     let mut client = ClientBuilder::new()
         .build::<ServerToClientMessage, ClientToServerMessage>()
@@ -45,6 +60,7 @@ fn client_update_none() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_connected() {
     let (mut server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
@@ -71,6 +87,7 @@ fn client_update_connected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_disconnected() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -93,6 +110,7 @@ fn client_update_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_some_error_connection_lost() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -135,6 +153,7 @@ macro_rules! create_test_message {
 create_test_message!(OutgoingSerializeError, { Err(()) }, { todo!() });
 
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_some_error_outgoing_serialize() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         OutgoingSerializeError,
@@ -165,10 +184,14 @@ fn client_update_some_error_outgoing_serialize() {
     server.stop();
 }
 
-create_test_message!(OutgoingTooLargeError, { Ok(OUTGOING_SIZE_DEFAULT + 1) }, {
-    todo!()
-});
+create_test_message!(
+    OutgoingTooLargeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default + 1) },
+    { todo!() }
+);
+
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_some_error_outgoing_too_large() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         OutgoingTooLargeError,
@@ -200,13 +223,14 @@ fn client_update_some_error_outgoing_too_large() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_some_error_incoming_too_large() {
     let (mut server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
         WORKER_COUNT.some,
     );
     let mut client = ClientBuilder::new()
-        .incoming_max_size(MINIMUM_INCOMING_SIZE)
+        .incoming_max_size(INCOMING_MESSAGE_SIZE.minimum)
         .build::<ServerToClientMessage, ClientToServerMessage>()
         .unwrap();
     client.connect(create_test_socket(port)).unwrap();
@@ -257,10 +281,13 @@ fn client_update_some_error_incoming_too_large() {
     server.stop();
 }
 
-create_test_message!(IncomingDeserializeError, { Ok(OUTGOING_SIZE_DEFAULT) }, {
-    Err(())
-});
+create_test_message!(
+    IncomingDeserializeError,
+    { Ok(OUTGOING_MESSAGE_SIZE.default) },
+    { Err(()) }
+);
 #[test]
+#[ignore = "Executed in serial with `client_update_run_tests`."]
 fn client_update_some_error_incoming_message_error() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         IncomingDeserializeError,

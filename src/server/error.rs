@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 use crate::server::ClientId;
 
@@ -51,6 +49,12 @@ pub enum ErrorServer {
     /// Incoming message size is above [`MAXIMUM_INCOMING_SIZE`].
     IncomingMessageSizeAboveMaximum,
 
+    /// Outgoing message size is below [`OUTGOING_SIZE_MINIMUM`].
+    OutgoingMessageSizeBelowMinimum,
+
+    /// Outgoing message size is above [`OUTGOING_SIZE_MAXIMUM`].
+    OutgoingMessageSizeAboveMaximum,
+
     /// Server is currently inactive
     Inactive,
 
@@ -63,14 +67,8 @@ pub enum ErrorServer {
     /// Provided socket address is already used by another process
     SocketAddressAlreadyUsed,
 
-    /// Error happened while trying to join supervisor thread
-    StopJoinError,
-
     /// Unexpected error happened
     UnexpectedError,
-
-    /// Server took too much time stopping.
-    StopTimeout,
 
     /// An unhandled IO error occurred
     UnhandledIOError(std::io::ErrorKind),
@@ -108,5 +106,8 @@ pub enum ErrorUpdate {
     IncomingMessageTooLarge(ClientId),
 
     /// Incoming message deserialize ended in error
-    IncomingMessageError(ClientId),
+    IncomingMessageDeserializeError(ClientId),
+
+    /// Sending a message to a client failed because TcpStreamBuffer is full and can't be emptied. (could be a busy client).
+    TcpStreamBufferFull(ClientId),
 }

@@ -1,26 +1,24 @@
-/*
-Copyright (c) 2026  NickelAnge.Studio
-Email               mathieu.grenier@nickelange.studio
-Git                 https://github.com/NickelAngeStudio/baphonet
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
+// Copyright (c) 2026  NickelAnge.Studio
+// Email               mathieu.grenier@nickelange.studio
+// Git                 https://github.com/NickelAngeStudio/baphonet
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 #[doc(hidden)]
 mod server;
@@ -59,44 +57,71 @@ pub mod status;
 pub mod channel;
 
 pub use builder::ServerBuilder;
+pub use error::ErrorServer;
+pub use error::ErrorTransceiver;
+pub use error::ErrorUpdate;
+pub use message::ServerUpdate;
 pub use server::Server;
 pub use status::Status;
 pub use transceiver::Transceiver;
 pub use transmitter::Transmitter;
 
+use crate::ConstRange;
 use crate::MAXIMUM_MESSAGE_SIZE;
 
 pub type ClientId = u16;
 
-/// Minimum size of incoming message.
-pub const MINIMUM_INCOMING_SIZE: usize = 1;
+/// Incoming message size range and default.
+///
+/// - `default` is 1024 bytes.
+/// - `minimum` is 1 byte.
+/// - `maximum` is 64 kilobytes.
+pub const INCOMING_MESSAGE_SIZE: ConstRange<usize> = ConstRange {
+    default: 1024,
+    minimum: 1,
+    maximum: MAXIMUM_MESSAGE_SIZE,
+};
 
-/// Default maximum size of incoming message. (1KB)
-pub const DEFAULT_INCOMING_SIZE: usize = 1024;
+/// Outgoing message size range and default.
+///
+/// - `default` is 64 kilobytes.
+/// - `minimum` is 1 byte.
+/// - `maximum` is 64 kilobytes.
+pub const OUTGOING_MESSAGE_SIZE: ConstRange<usize> = ConstRange {
+    default: MAXIMUM_MESSAGE_SIZE,
+    minimum: 1,
+    maximum: MAXIMUM_MESSAGE_SIZE,
+};
 
-/// Maximum size of incoming message.
-pub const MAXIMUM_INCOMING_SIZE: usize = MAXIMUM_MESSAGE_SIZE;
+/// Server maximum client size range and default.
+///
+/// - `default` is 32 clients.
+/// - `minimum` is 1 client.
+/// - `maximum` is 65535 clients.
+pub const MAXIMUM_CLIENT_SIZE: ConstRange<usize> = ConstRange {
+    default: 32,
+    minimum: 1,
+    maximum: ClientId::MAX as usize,
+};
 
-/// Current minimum client cap
-pub const MINIMUM_CLIENT: usize = 1;
+/// Server workers count range and default.
+///
+/// - `default` is 4 workers.
+/// - `minimum` is 1 worker.
+/// - `maximum` is 65535 workers.
+pub const SERVER_WORKER_COUNT: ConstRange<usize> = ConstRange {
+    default: 4,
+    minimum: 1,
+    maximum: ClientId::MAX as usize,
+};
 
-/// Default maximum client for builder
-pub const DEFAULT_MAXIMUM_CLIENT: usize = 32;
-
-/// Current maximum client cap
-pub const MAXIMUM_CLIENT: usize = ClientId::MAX as usize;
-
-/// Minimum worker count cap
-pub const MINIMUM_WORKER: usize = 1;
-
-/// Current minimum worker count
-pub const DEFAULT_WORKER_COUNT: usize = 4;
-
-/// Default pool rate of the supervisor worker per second.
-pub const DEFAULT_POOL_RATE_PER_SECOND: u64 = 30;
-
-/// Minimum pool rate that can be set.
-pub const MINIMUM_POOL_RATE_PER_SECOND: u64 = 1;
-
-/// Maximum pool rate that can be set.
-pub const MAXIMUM_POOL_RATE_PER_SECOND: u64 = 1000;
+/// Server pool rate per second range and default.
+///
+/// - `default` is 30 pps.
+/// - `minimum` is 1 pps.
+/// - `maximum` is 1000 pps.
+pub const POOL_RATE_PER_SECOND: ConstRange<u64> = ConstRange {
+    default: 30,
+    minimum: 1,
+    maximum: 1000,
+};

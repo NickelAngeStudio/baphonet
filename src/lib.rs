@@ -20,16 +20,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+/// Enumeration of constant comparison
+pub enum ConstRangeCompare {
+    /// Value is between minimum and maximum.
+    InRange,
 
+    /// Value is below minimum.
+    BelowMinimum,
+
+    /// Value is above maximum
+    AboveMaximum,
+}
+
+/// Default, minimum and maximum values of constants.
+pub struct ConstRange<T: PartialEq + PartialOrd> {
+    /// Default value of constant
+    pub default: T,
+
+    /// Minimum value of constant
+    pub minimum: T,
+
+    /// Maximum value of constant
+    pub maximum: T,
+}
+
+impl<T: PartialEq + PartialOrd> ConstRange<T> {
+    pub fn compare(&self, other: &T) -> ConstRangeCompare {
+        if *other < self.minimum {
+            return ConstRangeCompare::BelowMinimum;
+        }
+        if *other > self.maximum {
+            return ConstRangeCompare::AboveMaximum;
+        }
+
+        ConstRangeCompare::InRange
+    }
+}
 
 /// Bytes length of the size of messages.
 pub(crate) const SIZE_OF_MESSAGE_SIZE: usize = size_of::<u16>();
 
-/// Maximum message size is 65535 bytes (64ko).
+/// Bytes reserved for specifics client to server messages.
+pub const BYTES_RESERVED: usize = 135;
+
+/// Maximum message size is 65 400 bytes (64ko - 135 bytes).
 ///
 /// Message bigger than that should be cut in smaller message.
-pub const MAXIMUM_MESSAGE_SIZE: usize = u16::MAX as usize;
-
+pub const MAXIMUM_MESSAGE_SIZE: usize = (u16::MAX - 35) as usize;
 
 pub mod client;
 pub mod server;

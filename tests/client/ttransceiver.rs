@@ -28,6 +28,7 @@ use std::{
 use baphonet::client::{ErrorTransceiver, transceiver::Transceiver};
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, close_clients, compare_client_server_message, compare_server_client_message,
         create_server_and_clients_default,
@@ -37,6 +38,22 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(client_transceiver_run_tests(
+    client_transceiver_same_thread_receive,
+    client_transceiver_diff_thread_receive,
+    client_transceiver_same_thread_receive_wait,
+    client_transceiver_diff_thread_receive_wait,
+    client_transceiver_receive_wait_err_disconnected,
+    client_transceiver_same_thread_receive_timeout,
+    client_transceiver_diff_thread_receive_timeout,
+    client_transceiver_receive_timeout_err_disconnected,
+    client_transceiver_receive_timeout_err_timeout,
+    client_transceiver_same_thread_send,
+    client_transceiver_multi_thread_send,
+    client_transceiver_multi_clients_threads_send,
+    client_transceiver_send_err_disconnected
+));
+
 /// Messages sent by each dispatcher thread
 const MSG_SENT_PER_THREAD: usize = 64;
 const TRANSMITTER_THREAD: usize = 64;
@@ -44,6 +61,7 @@ const TRANSMITTER_THREAD: usize = 64;
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(1000);
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_same_thread_receive() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -76,6 +94,7 @@ fn client_transceiver_same_thread_receive() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_diff_thread_receive() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -111,6 +130,7 @@ fn client_transceiver_diff_thread_receive() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_same_thread_receive_wait() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -143,6 +163,7 @@ fn client_transceiver_same_thread_receive_wait() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_diff_thread_receive_wait() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -178,6 +199,7 @@ fn client_transceiver_diff_thread_receive_wait() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_receive_wait_err_disconnected() {
     let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
 
@@ -200,6 +222,7 @@ fn client_transceiver_receive_wait_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_same_thread_receive_timeout() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -232,6 +255,7 @@ fn client_transceiver_same_thread_receive_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_diff_thread_receive_timeout() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -267,6 +291,7 @@ fn client_transceiver_diff_thread_receive_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_receive_timeout_err_disconnected() {
     let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
 
@@ -289,6 +314,7 @@ fn client_transceiver_receive_timeout_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_receive_timeout_err_timeout() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -306,6 +332,7 @@ fn client_transceiver_receive_timeout_err_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_same_thread_send() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -338,6 +365,7 @@ fn client_transceiver_same_thread_send() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_multi_thread_send() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -381,6 +409,7 @@ fn client_transceiver_multi_thread_send() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_multi_clients_threads_send() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -428,6 +457,7 @@ fn client_transceiver_multi_clients_threads_send() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_transceiver_run_tests`."]
 fn client_transceiver_send_err_disconnected() {
     let mut _trns: Option<Transceiver<ServerToClientMessage, ClientToServerMessage>> = None;
 

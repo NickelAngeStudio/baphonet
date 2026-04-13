@@ -20,12 +20,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use crate::shared::{
-    CLIENT_SIZE, close_clients, create_server_and_clients_default,
-    message::{ClientToServerMessage, ServerToClientMessage},
+use crate::{
+    run_tests,
+    shared::{
+        CLIENT_SIZE, close_clients, create_server_and_clients_default,
+        message::{ClientToServerMessage, ServerToClientMessage},
+    },
 };
 
+run_tests!(server_stop_run_tests(
+    server_stop_ok_client_none,
+    server_stop_ok_client_one,
+    server_stop_ok_client_some,
+    server_stop_ok_client_all
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_stop_run_tests`."]
 fn server_stop_ok_client_none() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -37,6 +48,7 @@ fn server_stop_ok_client_none() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_stop_run_tests`."]
 fn server_stop_ok_client_one() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -48,6 +60,7 @@ fn server_stop_ok_client_one() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_stop_run_tests`."]
 fn server_stop_ok_client_some() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -59,6 +72,7 @@ fn server_stop_ok_client_some() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_stop_run_tests`."]
 fn server_stop_ok_client_all() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,

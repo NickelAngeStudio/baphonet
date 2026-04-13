@@ -96,4 +96,7 @@ pub enum ErrorWorker {
 
     /// An error occured while deserializing incoming message
     IncomingMessageDeserializeError,
+
+    /// Sending a message failed because TcpStreamBuffer is full and can't be emptied. (could be a busy server).
+    TcpStreamBufferFull,
 }

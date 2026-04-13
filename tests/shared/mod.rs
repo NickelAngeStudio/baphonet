@@ -73,6 +73,24 @@ pub const TEST_TCP_PORT: u16 = 50000;
 /// Maximum loop wait time.
 pub const LOOP_WAIT_TIME: Duration = std::time::Duration::from_millis(5000);
 
+/// Run test in serial mode
+#[macro_export]
+macro_rules! run_tests {
+    ($main_fn : ident ( $($test_fn : ident),+ )) => {
+        #[test]
+        fn $main_fn() {
+            $(
+            print!("Running `{}`... ", stringify!($test_fn));
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            $test_fn();
+            print!("ok\n");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            )+
+        }
+
+    };
+}
+
 #[macro_export]
 macro_rules! timeout_loop {
 

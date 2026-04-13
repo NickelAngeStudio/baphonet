@@ -28,6 +28,7 @@ use baphonet::server::{
     ServerUpdate,
 };
 
+use crate::run_tests;
 use crate::{
     shared::{
         CLIENT_SIZE, TEST_TCP_PORT, close_clients, create_connect_clients,
@@ -37,7 +38,22 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(server_update_run_tests(
+    server_update_none,
+    server_update_some_active,
+    server_update_some_client_connected,
+    server_update_some_client_disconnected,
+    server_update_some_full,
+    server_update_some_inactive,
+    server_update_some_error_client_not_found,
+    server_update_some_error_outgoing_too_large,
+    server_update_some_error_outgoing_serialize_error,
+    server_update_some_error_incoming_too_large,
+    server_update_some_error_incoming_deserialize_error
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_none() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()
@@ -49,6 +65,7 @@ fn server_update_none() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_active() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()
@@ -71,6 +88,7 @@ fn server_update_some_active() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_client_connected() {
     let mut server = ServerBuilder::new()
         .maximum_client(CLIENT_SIZE.all)
@@ -105,6 +123,7 @@ fn server_update_some_client_connected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_client_disconnected() {
     let mut server = ServerBuilder::new()
         .maximum_client(CLIENT_SIZE.all)
@@ -152,6 +171,7 @@ fn server_update_some_client_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_full() {
     let mut server = ServerBuilder::new()
         .maximum_client(CLIENT_SIZE.all)
@@ -181,6 +201,7 @@ fn server_update_some_full() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_inactive() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -232,6 +253,7 @@ fn server_update_some_error_connection_lost() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_error_client_not_found() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -312,6 +334,7 @@ create_test_message!(
 );
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_error_outgoing_too_large() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         OutgoingTooLargeError,
@@ -348,6 +371,7 @@ fn server_update_some_error_outgoing_too_large() {
 create_test_message!(OutgoingSerializeError, { Err(()) }, { todo!() });
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_error_outgoing_serialize_error() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         OutgoingSerializeError,
@@ -382,6 +406,7 @@ fn server_update_some_error_outgoing_serialize_error() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_error_incoming_too_large() {
     let mut server = ServerBuilder::new()
         .maximum_client(CLIENT_SIZE.all)
@@ -429,7 +454,9 @@ create_test_message!(
     { Ok(OUTGOING_MESSAGE_SIZE.minimum) },
     { Err(()) }
 );
+
 #[test]
+#[ignore = "Executed in serial with `server_update_run_tests`."]
 fn server_update_some_error_incoming_deserialize_error() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         IncomingDeserializeError,

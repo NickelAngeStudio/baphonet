@@ -50,13 +50,13 @@ const SERVER_TOTAL_MESSAGE_TO_RECEIVE: usize =
 const CLIENT_TRANSMITTER_THREAD: usize = 4;
 
 /// Count of message sent per client thread
-const CLIENT_MESSAGE_TO_SEND_PER_THREAD: usize = u16::MAX as usize;
+const CLIENT_MESSAGE_TO_SEND_PER_THREAD: usize = u16::MAX as usize * SERVER_TRANSMITTER_THREAD;
 
 /// Total message to send from client
 const CLIENT_TOTAL_MESSAGE_TO_RECEIVE: usize =
     CLIENT_TRANSMITTER_THREAD * CLIENT_MESSAGE_TO_SEND_PER_THREAD;
 
-const MAX_TIME_PER_THREAD: Duration = Duration::from_secs(10);
+const MAX_TIME_PER_THREAD: Duration = Duration::from_secs(30);
 
 struct StCMessage {
     p32: u32,
@@ -203,6 +203,7 @@ fn handle_client_transmitter(worker_id: usize, transmitter: client::Transmitter<
 fn handle_client_transceiver(transceiver: client::Transceiver<StCMessage, CtSMessage>) {
     let mut sum_recv: usize = 0;
     let start = Instant::now();
+
     loop {
         match transceiver.receive_timeout(MAX_TIME_PER_THREAD) {
             Ok(_) => {
@@ -215,7 +216,7 @@ fn handle_client_transceiver(transceiver: client::Transceiver<StCMessage, CtSMes
             break;
         }
         if start.elapsed() > MAX_TIME_PER_THREAD {
-            panic!("Client Receiver timeout at {} messages received.", sum_recv)
+            panic!("Client Receiver timeout at {} messages received.", sum_recv);
         }
     }
     println!(
@@ -228,6 +229,7 @@ fn handle_client_transceiver(transceiver: client::Transceiver<StCMessage, CtSMes
 fn handle_server_transmitter(worker_id: usize, transmitter: server::Transmitter<StCMessage>) {
     let mut sum_sent: usize = 0;
     let start = Instant::now();
+
     loop {
         transmitter
             .send(
@@ -252,7 +254,7 @@ fn handle_server_transmitter(worker_id: usize, transmitter: server::Transmitter<
     println!(
         "Server Transmitter {} finished {} messages in {}ms.",
         worker_id,
-        CLIENT_MESSAGE_TO_SEND_PER_THREAD,
+        SERVER_MESSAGE_TO_SEND_PER_THREAD,
         start.elapsed().as_millis()
     )
 }

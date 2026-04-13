@@ -107,4 +107,7 @@ pub enum ErrorUpdate {
 
     /// Incoming message deserialize ended in error
     IncomingMessageDeserializeError(ClientId),
+
+    /// Sending a message to a client failed because TcpStreamBuffer is full and can't be emptied. (could be a busy client).
+    TcpStreamBufferFull(ClientId),
 }

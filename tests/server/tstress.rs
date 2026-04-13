@@ -78,6 +78,20 @@ impl Message for CtSMessage {
     }
 }
 
+/// Array of message count for tests.
+///
+/// Count higher than 8192 will cause `Resource temporarily unavailable (os error 11)`.
+const MSG_COUNT: [usize; 4] = [256, 1024, 4096, 8192];
+
+// Array of pool rate for tests
+const POOL_RATE: [u64; 4] = [30, 60, 120, 240];
+
+// Array of maximum clients for tests
+const MAX_CLIENT: [usize; 5] = [16, 32, 64, 128, 256];
+
+// Vector of worker count for tests
+const WORKER_COUNT: [usize; 6] = [1, 2, 4, 8, 16, 32];
+
 /// Multiple clients will blast the server with messages.
 /// The server will acknowledge each message received.
 ///
@@ -85,36 +99,24 @@ impl Message for CtSMessage {
 #[test]
 #[ignore = "Long run time"]
 fn server_stress_test() {
-    // Vector of message count for tests
-    let msg_count: Vec<usize> = vec![256, 1024, 4096];
-
-    // Vector of pool rate for tests
-    let pool_rate: Vec<u64> = vec![30, 60, 120, 240];
-
-    // Vector of maximum clients for tests
-    let max_client: Vec<usize> = vec![32, 64, 128, 256];
-
-    // Vector of worker count for tests
-    let worker_count: Vec<usize> = vec![1, 2, 4, 8, 16, 32];
-
-    let total_width = worker_count.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
+    let total_width = WORKER_COUNT.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
 
     // Keep track of best worker of each categories
     let mut best_worker_count = Vec::<usize>::new();
-    best_worker_count.resize(worker_count.len(), 0);
+    best_worker_count.resize(WORKER_COUNT.len(), 0);
 
-    for maxc in &max_client {
-        write_table_header(&worker_count);
+    for maxc in &MAX_CLIENT {
+        write_table_header();
 
-        for msgc in &msg_count {
-            for pr in &pool_rate {
+        for msgc in &MSG_COUNT {
+            for pr in &POOL_RATE {
                 table_line_header(*maxc, *msgc, *pr);
 
                 let mut results = Vec::<u128>::new();
-                results.resize(worker_count.len(), 0);
+                results.resize(WORKER_COUNT.len(), 0);
                 let mut res_index: usize = 0;
 
-                for wc in &worker_count {
+                for wc in &WORKER_COUNT {
                     let duration = server_stress_with_worker_count(*maxc, *wc, *pr, *msgc);
                     line_result(duration.as_millis());
 
@@ -128,7 +130,7 @@ fn server_stress_test() {
         }
     }
 
-    write_table_footer(total_width, &worker_count, &best_worker_count);
+    write_table_footer(total_width, &best_worker_count);
 }
 
 fn server_stress_with_worker_count(
@@ -188,24 +190,20 @@ fn server_stress_with_worker_count(
 }
 
 /// Ugly code for pretty result
-fn write_table_footer(
-    total_width: usize,
-    worker_count: &Vec<usize>,
-    best_worker_count: &Vec<usize>,
-) {
+fn write_table_footer(total_width: usize, best_worker_count: &Vec<usize>) {
     // Write workers results
     println!("*={}", align_right(format!("*"), total_width - 2, '=',));
     print!("*                    |");
 
-    for wc in worker_count {
-        print!("{}", align_right(format!("{}", *wc), COLUMN_WIDTH, ' ',));
+    for wc in WORKER_COUNT {
+        print!("{}", align_right(format!("{}", wc), COLUMN_WIDTH, ' ',));
     }
     print!(" *\n");
 
     println!("*={}", align_right(format!("*"), total_width - 2, '=',));
     let base_line = format!(
         "[{}] WORKERS BEST  |",
-        get_best_worker_count(&best_worker_count, &worker_count)
+        get_best_worker_count(&best_worker_count)
     );
     print!("* ");
     print!("{}", align_right(base_line, 20, ' '));
@@ -240,7 +238,7 @@ fn table_line_header(max_client: usize, msg_count: usize, pool_rate: u64) {
     );
 }
 
-fn get_best_worker_count(best_worker: &Vec<usize>, worker_count: &Vec<usize>) -> usize {
+fn get_best_worker_count(best_worker: &Vec<usize>) -> usize {
     let mut best_index: usize = 0;
 
     for index in 0..best_worker.len() {
@@ -249,7 +247,7 @@ fn get_best_worker_count(best_worker: &Vec<usize>, worker_count: &Vec<usize>) ->
         }
     }
 
-    worker_count[best_index]
+    WORKER_COUNT[best_index]
 }
 
 /// Increment the best worker according to results.
@@ -280,8 +278,8 @@ fn align_left(value: String, length: usize, chr: char) -> String {
 }
 
 /// This code is ugly, only made it so result are pretty.
-fn write_table_header(worker_count: &Vec<usize>) {
-    let total_width = worker_count.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
+fn write_table_header() {
+    let total_width = WORKER_COUNT.len() * COLUMN_WIDTH + COLUMN_WIDTH * 3 + 6;
 
     println!("{}", align_right(format!("*"), total_width, '*',));
 
@@ -289,8 +287,8 @@ fn write_table_header(worker_count: &Vec<usize>) {
     print!("{}", "  MSGS");
     print!("{}", "    PR |");
 
-    for wc in worker_count {
-        print!("{}", align_right(format!("{}", *wc), COLUMN_WIDTH, ' '));
+    for wc in WORKER_COUNT {
+        print!("{}", align_right(format!("{}", wc), COLUMN_WIDTH, ' '));
     }
     print!(" *\n");
     println!("{}", align_right(format!("*"), total_width, '*',));

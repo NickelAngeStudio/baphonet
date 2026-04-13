@@ -32,6 +32,7 @@ use baphonet::{
 };
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, WORKER_COUNT, close_clients, create_server_and_clients,
         message::{ClientToServerMessage, ServerToClientMessage},
@@ -39,7 +40,16 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(server_close_run_tests(
+    server_close_connection_ok_one,
+    server_close_connection_ok_some,
+    server_close_connection_ok_all,
+    server_close_connection_err_inactive,
+    server_close_connection_err_not_found
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_close_run_tests`."]
 fn server_close_connection_ok_one() {
     server_close_connection_ok_client(WORKER_COUNT.one, CLIENT_SIZE.one);
     server_close_connection_ok_client(WORKER_COUNT.some, CLIENT_SIZE.one);
@@ -47,6 +57,7 @@ fn server_close_connection_ok_one() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_close_run_tests`."]
 fn server_close_connection_ok_some() {
     server_close_connection_ok_client(WORKER_COUNT.one, CLIENT_SIZE.some);
     server_close_connection_ok_client(WORKER_COUNT.some, CLIENT_SIZE.some);
@@ -54,6 +65,7 @@ fn server_close_connection_ok_some() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_close_run_tests`."]
 fn server_close_connection_ok_all() {
     server_close_connection_ok_client(WORKER_COUNT.one, CLIENT_SIZE.all);
     server_close_connection_ok_client(WORKER_COUNT.some, CLIENT_SIZE.all);
@@ -61,6 +73,7 @@ fn server_close_connection_ok_all() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_close_run_tests`."]
 fn server_close_connection_err_inactive() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()
@@ -75,6 +88,7 @@ fn server_close_connection_err_inactive() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_close_run_tests`."]
 fn server_close_connection_err_not_found() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,

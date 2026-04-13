@@ -60,10 +60,13 @@ impl<T: PartialEq + PartialOrd> ConstRange<T> {
 /// Bytes length of the size of messages.
 pub(crate) const SIZE_OF_MESSAGE_SIZE: usize = size_of::<u16>();
 
-/// Maximum message size is 65535 bytes (64ko).
+/// Bytes reserved for specifics client to server messages.
+pub const BYTES_RESERVED: usize = 135;
+
+/// Maximum message size is 65 400 bytes (64ko - 135 bytes).
 ///
 /// Message bigger than that should be cut in smaller message.
-pub const MAXIMUM_MESSAGE_SIZE: usize = u16::MAX as usize;
+pub const MAXIMUM_MESSAGE_SIZE: usize = (u16::MAX - 35) as usize;
 
 pub mod client;
 pub mod server;

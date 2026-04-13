@@ -25,9 +25,10 @@ use std::{
     time::Duration,
 };
 
-use baphonet::server::{ClientId, ErrorTransceiver, ServerBuilder, Transceiver, transceiver};
+use baphonet::server::{ClientId, ErrorTransceiver, ServerBuilder, Transceiver};
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, WORKER_COUNT, accumulate, close_clients, compare_client_server_message,
         compare_server_client_message, create_server_and_clients,
@@ -46,7 +47,27 @@ const MULTI_THREAD_COUNT: usize = 16;
 /// Timeout for receive_timeout()
 const RECEIVE_TIMEOUT: Duration = Duration::from_millis(1000);
 
+run_tests!(server_transceiver_run_tests(
+    server_transceiver_same_thread_receive,
+    server_transceiver_diff_thread_receive,
+    server_transceiver_same_thread_receive_wait,
+    server_transceiver_diff_thread_receive_wait,
+    server_transceiver_receive_wait_err_disconnected,
+    server_transceiver_same_thread_receive_timeout,
+    server_transceiver_diff_thread_receive_timeout,
+    server_transceiver_receive_timeout_err_disconnected,
+    server_transceiver_receive_timeout_err_timeout,
+    server_transceiver_same_thread_send,
+    server_transceiver_multi_thread_send,
+    server_transceiver_send_err_disconnected,
+    server_transceiver_same_thread_send_vec,
+    server_transceiver_multi_thread_send_vec,
+    server_transceiver_send_vec_err_disconnected,
+    server_transceiver_send_vec_no_destination
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_same_thread_receive() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -80,6 +101,7 @@ fn server_transceiver_same_thread_receive() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_diff_thread_receive() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -117,6 +139,7 @@ fn server_transceiver_diff_thread_receive() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_same_thread_receive_wait() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -150,6 +173,7 @@ fn server_transceiver_same_thread_receive_wait() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_diff_thread_receive_wait() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -187,6 +211,7 @@ fn server_transceiver_diff_thread_receive_wait() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_receive_wait_err_disconnected() {
     let mut _trns: Option<Transceiver<ClientToServerMessage, ServerToClientMessage>> = None;
     {
@@ -203,6 +228,7 @@ fn server_transceiver_receive_wait_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_same_thread_receive_timeout() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -236,6 +262,7 @@ fn server_transceiver_same_thread_receive_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_diff_thread_receive_timeout() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -273,6 +300,7 @@ fn server_transceiver_diff_thread_receive_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_receive_timeout_err_disconnected() {
     let mut _trns: Option<Transceiver<ClientToServerMessage, ServerToClientMessage>> = None;
     {
@@ -289,6 +317,7 @@ fn server_transceiver_receive_timeout_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_receive_timeout_err_timeout() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()
@@ -308,6 +337,7 @@ fn server_transceiver_receive_timeout_err_timeout() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_same_thread_send() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -361,6 +391,7 @@ fn is_all_message_recv(recv: &Vec<usize>, total_recv: usize) -> bool {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_multi_thread_send() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -417,6 +448,7 @@ fn server_transceiver_multi_thread_send() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_send_err_disconnected() {
     let mut _trns: Option<Transceiver<ClientToServerMessage, ServerToClientMessage>> = None;
     {
@@ -437,6 +469,7 @@ fn server_transceiver_send_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_same_thread_send_vec() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -482,6 +515,7 @@ fn server_transceiver_same_thread_send_vec() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_multi_thread_send_vec() {
     let (mut server, mut clients) = create_server_and_clients::<
         ClientToServerMessage,
@@ -539,6 +573,7 @@ fn server_transceiver_multi_thread_send_vec() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_send_vec_err_disconnected() {
     let mut _trns: Option<Transceiver<ClientToServerMessage, ServerToClientMessage>> = None;
     {
@@ -560,6 +595,7 @@ fn server_transceiver_send_vec_err_disconnected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_transceiver_run_tests`."]
 fn server_transceiver_send_vec_no_destination() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()

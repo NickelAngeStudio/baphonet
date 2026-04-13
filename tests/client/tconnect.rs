@@ -24,14 +24,24 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 use baphonet::client::{ErrorClient, builder::ClientBuilder};
 
-use crate::shared::{
-    CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket,
-    message::{ClientToServerMessage, ServerToClientMessage},
+use crate::{
+    run_tests,
+    shared::{
+        CLIENT_SIZE, WORKER_COUNT, create_server_and_port, create_test_socket,
+        message::{ClientToServerMessage, ServerToClientMessage},
+    },
 };
 
+run_tests!(client_connect_run_tests(
+    client_connect_ok,
+    client_connect_err_not_found,
+    client_connect_err_already_connected
+));
+
 #[test]
+#[ignore = "Executed in serial with `client_connect_run_tests`."]
 fn client_connect_ok() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+    let (mut server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
         WORKER_COUNT.all,
     );
@@ -43,11 +53,15 @@ fn client_connect_ok() {
         Ok(_) => {}
         Err(_) => panic!("Shouldn't be err()!"),
     }
+
+    client.close();
+    server.stop();
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_connect_run_tests`."]
 fn client_connect_err_not_found() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+    let (mut server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
         WORKER_COUNT.all,
     );
@@ -63,11 +77,15 @@ fn client_connect_err_not_found() {
         Ok(_) => panic!("Shouldn't be Ok()!"),
         Err(err) => assert_eq!(err, ErrorClient::ServerNotFound),
     }
+
+    client.close();
+    server.stop();
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_connect_run_tests`."]
 fn client_connect_err_already_connected() {
-    let (mut _server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
+    let (mut server, port) = create_server_and_port::<ClientToServerMessage, ServerToClientMessage>(
         CLIENT_SIZE.all,
         WORKER_COUNT.all,
     );
@@ -84,4 +102,7 @@ fn client_connect_err_already_connected() {
         Ok(_) => panic!("Shouldn't be Ok()!"),
         Err(err) => assert_eq!(err, ErrorClient::AlreadyConnected),
     }
+
+    client.close();
+    server.stop();
 }

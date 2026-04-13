@@ -24,12 +24,22 @@ use std::net::{IpAddr, SocketAddr};
 
 use baphonet::server::{ServerBuilder, Status, error::ErrorServer};
 
-use crate::shared::{
-    TEST_IPV4, TEST_TCP_PORT,
-    message::{ClientToServerMessage, ServerToClientMessage},
+use crate::{
+    run_tests,
+    shared::{
+        TEST_IPV4, TEST_TCP_PORT,
+        message::{ClientToServerMessage, ServerToClientMessage},
+    },
 };
 
+run_tests!(server_start_run_tests(
+    server_start_ok,
+    server_start_err_active,
+    server_start_err_address_already_used
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_start_run_tests`."]
 fn server_start_ok() {
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 1);
     let mut server = ServerBuilder::new()
@@ -45,6 +55,7 @@ fn server_start_ok() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_start_run_tests`."]
 fn server_start_err_active() {
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 2);
     let mut server = ServerBuilder::new()
@@ -61,6 +72,7 @@ fn server_start_err_active() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_start_run_tests`."]
 fn server_start_err_address_already_used() {
     let socket = SocketAddr::new(IpAddr::V4(TEST_IPV4), TEST_TCP_PORT - 4);
 

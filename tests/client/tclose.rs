@@ -26,6 +26,7 @@ use baphonet::{
 };
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, create_server_and_clients_default,
         message::{ClientToServerMessage, ServerToClientMessage},
@@ -33,7 +34,13 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(client_close_run_tests(
+    client_close_not_connected,
+    client_close_connected
+));
+
 #[test]
+#[ignore = "Executed in serial with `client_close_run_tests`."]
 fn client_close_not_connected() {
     let mut client = ClientBuilder::new()
         .build::<ServerToClientMessage, ClientToServerMessage>()
@@ -43,6 +50,7 @@ fn client_close_not_connected() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `client_close_run_tests`."]
 fn client_close_connected() {
     let (mut server, mut clients) = create_server_and_clients_default::<
         ClientToServerMessage,

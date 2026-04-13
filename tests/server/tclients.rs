@@ -23,6 +23,7 @@
 use baphonet::server::{ClientId, ServerBuilder, error::ErrorServer};
 
 use crate::{
+    run_tests,
     shared::{
         CLIENT_SIZE, close_clients, create_server_and_clients_default,
         message::{ClientToServerMessage, ServerToClientMessage},
@@ -30,7 +31,16 @@ use crate::{
     timeout_loop,
 };
 
+run_tests!(server_clients_run_tests(
+    server_clients_none,
+    server_clients_one,
+    server_clients_some,
+    server_clients_all,
+    server_clients_err_inactive
+));
+
 #[test]
+#[ignore = "Executed in serial with `server_clients_run_tests`."]
 fn server_clients_none() {
     let (mut server, mut _clients) = create_server_and_clients_default::<
         ClientToServerMessage,
@@ -42,21 +52,25 @@ fn server_clients_none() {
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_clients_run_tests`."]
 fn server_clients_one() {
     test_server_clients(CLIENT_SIZE.one);
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_clients_run_tests`."]
 fn server_clients_some() {
     test_server_clients(CLIENT_SIZE.some);
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_clients_run_tests`."]
 fn server_clients_all() {
     test_server_clients(CLIENT_SIZE.all);
 }
 
 #[test]
+#[ignore = "Executed in serial with `server_clients_run_tests`."]
 fn server_clients_err_inactive() {
     let mut server = ServerBuilder::new()
         .build::<ClientToServerMessage, ServerToClientMessage>()

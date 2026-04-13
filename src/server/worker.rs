@@ -416,18 +416,26 @@ impl<IN: Message + Send, OUT: Message + Send> Worker<IN, OUT> {
                     // For each destination
                     for client_id in message.destinations {
                         get_client_from_id! { self, client, clients, client_id,
-                            // Send size
-                            match client.stream.write_all(&size_bytes) {
+
+                            match Write::flush(&mut client.stream) {
                                 Ok(_) => {
-                                    // Send message
-                                     match client.stream.write_all(&buffer[..size]) {
+                                    // Send size
+                                    match client.stream.write_all(&size_bytes) {
                                         Ok(_) => {
                                             // Send message
+                                             match client.stream.write_all(&buffer[..size]) {
+                                                Ok(_) => {
+                                                    // Send message
+                                                },
+                                                Err(_) => {
+                                                    self.handle_connection_lost(client, client_id); // Connection lost
+                                                }
+                                            }
                                         },
                                         Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
                                     }
                                 },
-                                Err(_) => self.handle_connection_lost(client, client_id), // Connection lost
+                                Err(_) => self.send_message_to_supervisor(SupervisorWorkerMessage::Error(ErrorUpdate::TcpStreamBufferFull(client_id))),
                             }
                         }
                     }
